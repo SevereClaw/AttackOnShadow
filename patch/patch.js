@@ -93,7 +93,10 @@ function patchBundle(src) {
   rep('кнопка обновления прошивки', 'e.createElement(Tga.Button,{w:75,h:25,style:{flex:"0 0 auto"},mode:"Common",isUpgrade:void 0!==f&&0!==f.upgradeMethods.length,text:FE.text.固件升级()',
     'window.AOS_OFFLINE?null:e.createElement(Tga.Button,{w:75,h:25,style:{flex:"0 0 auto"},mode:"Common",isUpgrade:void 0!==f&&0!==f.upgradeMethods.length,text:FE.text.固件升级()');
 
-  // 3) Shorter Russian labels where the stock ones are cut off with "…".
+  // 3) Expose the MobX root store to the mod (auto profiles use deviceStore.setCurrentProfile).
+  rep('доступ к хранилищу', ',Ida={batteryStore:new ', ',Ida=window.__aosStores={batteryStore:new ');
+
+  // 4) Shorter Russian labels where the stock ones are cut off with "…".
   const ru = {
     '最大行程校准': 'Калибровка',
     '开始校准': 'Старт',
@@ -159,7 +162,7 @@ function install(app) {
   // index.html: load config + theme before the app bundle
   const indexPath = path.join(app, 'dist', 'index.html');
   let html = read(indexPath);
-  const inject = '<script src="./aos/aos-config.js"></script><link id="aos-theme-css" rel="stylesheet" href="./aos/aos-theme.css"><script src="./aos/aos-theme.js"></script>';
+  const inject = '<script src="./aos/aos-config.js"></script><link id="aos-theme-css" rel="stylesheet" href="./aos/aos-theme.css"><script src="./aos/aos-theme.js"></script><script src="./aos/aos-features.js"></script>';
   if (html.indexOf('</style>') === -1) throw new Error('index.html: не найден </style>');
   // (the marker goes after the doctype: anything before it would switch Chromium to quirks mode)
   html = html.replace('</style>', '</style>' + inject).replace(/<title>[^<]*<\/title>/, '<title>AttackOnShadow</title><!--' + MARK + '-->');
@@ -174,6 +177,10 @@ function install(app) {
     if (mainSrc.indexOf(from) === -1) warn('пункт трея не найден:', zh);
     else mainSrc = mainSrc.split(from).join('label: "' + ru + '"');
   }
+  // window size comes from the mod's scale setting (aos-main.js)
+  const ratioFrom = '  ratio = r > 1 ? 1 : r;';
+  if (mainSrc.indexOf(ratioFrom) === -1) warn('размер окна: фрагмент не найден, масштаб будет только через Ctrl+колесо');
+  else mainSrc = mainSrc.replace(ratioFrom, '  ratio = global.__aosRatio ? global.__aosRatio(r) : (r > 1 ? 1 : r);');
   write(mainPath, MARK + 'try{require(require("path").join(__dirname,"..","aos","aos-main.js"))}catch(e){console.error("[AttackOnShadow]",e)}\n' + mainSrc);
   fs.copyFileSync(path.join(MOD_ROOT, 'assets', 'aos-icon.png'), path.join(aosDir, 'aos-icon.png'));
 
