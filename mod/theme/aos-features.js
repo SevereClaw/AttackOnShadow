@@ -24,11 +24,12 @@
   var SOUND_DIRS = [path.join(USER_DIR, 'aos-sounds'), path.join(remote.app.getAppPath(), 'aos', 'sounds')];
 
   // ---------- settings ----------
-  var settings = { auto: { enabled: true, rules: [], fallback: null, interval: 3 }, sounds: { enabled: true, volume: 60 } };
+  var settings = { auto: { enabled: true, rules: [], fallback: null, interval: 3 }, sounds: { enabled: true, volume: 60 }, updates: { auto: true, lastCheck: 0 } };
   try {
     var saved = JSON.parse(fs.readFileSync(SETTINGS, 'utf8'));
     if (saved.auto) Object.assign(settings.auto, saved.auto);
     if (saved.sounds) Object.assign(settings.sounds, saved.sounds);
+    if (saved.updates) Object.assign(settings.updates, saved.updates);
   } catch (e) { /* first run */ }
   function save() {
     try { fs.mkdirSync(USER_DIR, { recursive: true }); fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2)); }
@@ -191,6 +192,23 @@
   }, true);
   sendScale('get');
 
+  // ---------- mod updates (IPC to aos-main.js) ----------
+  var upd = { state: 'idle' };
+  ipc.on('aos-update', function (_, u) {
+    var prevLatest = upd.latest;
+    upd = Object.assign({}, upd, u);
+    if (u.state === 'available' || u.state === 'latest') { settings.updates.lastCheck = Date.now(); save(); }
+    if (u.state === 'available' && u.latest !== prevLatest) {
+      toast('Доступна новая версия мода: ' + u.latest);
+      var b = document.querySelector('.aos-open'); if (b) b.classList.add('aos-has-update');
+    }
+    renderUpdate();
+  });
+  ipc.send('aos-update', { action: 'info' });
+  if (settings.updates.auto && Date.now() - (settings.updates.lastCheck || 0) > 24 * 3600 * 1000) {
+    setTimeout(function () { ipc.send('aos-update', { action: 'check' }); }, 8000);
+  }
+
   // ---------- mod panel ----------
   function h(tag, attrs, children) {
     var el = document.createElement(tag);
@@ -203,7 +221,7 @@
     return el;
   }
 
-  var modal = null, statusBox = null, rulesBox = null, scaleBox = null, procSelect = null, exeInput = null;
+  var modal = null, statusBox = null, rulesBox = null, scaleBox = null, procSelect = null, exeInput = null, updBox = null, updBtn = null, updVer = null;
 
   function openPanel() {
     if (!modal) buildPanel();
@@ -289,6 +307,27 @@
     sc.appendChild(h('p', { class: 'aos-hint', text: 'Ещё: Ctrl + колесо мыши, Ctrl + / Ctrl − / Ctrl 0. Размер запоминается.' }));
     panel.appendChild(sc);
 
+    // updates
+    var up = h('section', { class: 'aos-card' });
+    up.appendChild(h('h3', { text: 'Обновления мода' }));
+    updVer = h('div', { class: 'aos-scale-value aos-mono aos-ver' });
+    up.appendChild(updVer);
+    updBox = h('div', { class: 'aos-hint aos-upd-status' });
+    up.appendChild(updBox);
+    updBtn = h('button', { class: 'aos-btn aos-btn-main', text: 'Обновить', onclick: function () {
+      if (upd.state !== 'available') return;
+      ipc.send('aos-update', { action: 'install' });
+    } });
+    up.appendChild(h('div', { class: 'aos-row' }, [
+      h('button', { class: 'aos-btn', text: 'Проверить', onclick: function () { ipc.send('aos-update', { action: 'check' }); } }),
+      updBtn,
+    ]));
+    var autoUpd = h('label', { class: 'aos-check' }, [h('input', { type: 'checkbox' }), ' Проверять раз в день']);
+    autoUpd.firstChild.checked = !!settings.updates.auto;
+    autoUpd.firstChild.addEventListener('change', function () { settings.updates.auto = this.checked; save(); });
+    up.appendChild(autoUpd);
+    panel.appendChild(up);
+
     modal.appendChild(panel);
     document.body.appendChild(modal);
   }
@@ -362,7 +401,28 @@
   function renderScale() {
     if (scaleBox) scaleBox.textContent = Math.round(scale.percent || 100) + '%';
   }
-  function renderAll() { renderStatus(); renderRules(); renderSounds(); renderScale(); }
+  function renderUpdate() {
+    if (!updBox) return;
+    if (updVer) updVer.textContent = 'v' + (upd.current || '?');
+    var msg = {
+      idle: 'Проверка идёт только на GitHub, остальная сеть по-прежнему закрыта.',
+      checking: 'Проверяю…',
+      latest: 'Стоит последняя версия.',
+      available: 'Доступна v' + upd.latest + (upd.name && upd.name !== 'v' + upd.latest ? ' — ' + upd.name : '') + '.',
+      downloading: 'Скачиваю…',
+      extracting: 'Распаковываю…',
+      installing: 'Устанавливаю: драйвер закроется и откроется снова.',
+      error: 'Не вышло: ' + (upd.error || 'ошибка'),
+    }[upd.state] || '';
+    updBox.textContent = msg;
+    if (upd.state === 'available') {
+      updBox.appendChild(document.createTextNode(' '));
+      updBox.appendChild(h('span', { class: 'aos-link', text: 'Что нового', onclick: function () { ipc.send('aos-update', { action: 'notes' }); } }));
+    }
+    updBtn.style.display = upd.state === 'available' ? '' : 'none';
+    updBtn.textContent = upd.state === 'available' ? 'Обновить до v' + upd.latest : 'Обновить';
+  }
+  function renderAll() { renderStatus(); renderRules(); renderSounds(); renderScale(); renderUpdate(); }
 
   // entry button in the header (outside #root so React never touches it)
   function addButton() {

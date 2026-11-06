@@ -6,6 +6,7 @@ set "ACTION=%~1"
 if not defined ACTION set "ACTION=install"
 set "EXE="
 set "ARG=%~2"
+set "FLAG=%~3"
 set "TMPFILE=%TEMP%\aos-target.txt"
 
 rem --- elevated re-run passes the path through a temp file ---
@@ -52,8 +53,10 @@ set "PROBE=%DIR%\resources\app\.aos-write-test"
 type nul >"%PROBE%" 2>nul
 if exist "%PROBE%" goto :rights_ok
 echo Administrator rights are needed for this folder, asking Windows...
+set "FLAGARG="
+if defined FLAG set "FLAGARG=,'%FLAG%'"
 >"%TMPFILE%" echo %EXE%
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '%ACTION%','--from-temp' -Verb RunAs"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '%ACTION%','--from-temp'%FLAGARG% -Verb RunAs"
 exit /b
 :rights_ok
 del "%PROBE%" >nul 2>&1
@@ -72,10 +75,19 @@ type "%LOG%"
 echo.
 if not "%RC%"=="0" (
   echo FAILED, exit code %RC%. Log: "%LOG%"
-) else (
-  if /i "%ACTION%"=="install" echo Done. Start Attack Shark Driver as usual.
-  if /i "%ACTION%"=="uninstall" echo Done. The original driver is back.
+  goto :end
 )
+if /i "%FLAG%"=="--relaunch" goto :relaunch
+if /i "%ACTION%"=="install" echo Done. Start Attack Shark Driver as usual.
+if /i "%ACTION%"=="uninstall" echo Done. The original driver is back.
+goto :end
+
+:relaunch
+rem update from the mod panel: start the driver again and close this window
+echo Done. Starting Attack Shark Driver...
+start "" "%EXE%"
+timeout /t 2 /nobreak >nul
+exit /b 0
 
 :end
 echo.

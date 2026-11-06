@@ -126,7 +126,7 @@ html.aos .Toastify__toast {
 @keyframes aos-in { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 .aos-sheet {
   width: 1040px; max-height: calc(100vh - 36px); overflow: auto; padding: 16px 26px 20px;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px 20px;
   background: linear-gradient(150deg, rgba(11, 45, 125, 0.96), rgba(3, 12, 43, 0.97));
   border-left: 4px solid #29d3ff;
   clip-path: polygon(0 0, calc(100% - 28px) 0, 100% 28px, 100% 100%, 0 100%);
@@ -191,3 +191,11 @@ html.aos .Toastify__toast {
   font: italic 700 15px "Bahnschrift SemiBold SemiConden", "Bahnschrift", "Segoe UI", sans-serif;
 }
 .aos-toast.on { opacity: 1; transform: translate(-50%, 0) skewX(-12deg); }
+
+.aos-ver { text-align: left; margin: 2px 0 4px; }
+.aos-link { color: #29d3ff; cursor: pointer; text-decoration: underline; }
+.aos-link:hover { color: #fff; }
+.aos-open.aos-has-update::after {
+  content: ""; position: absolute; top: -4px; right: -6px; width: 9px; height: 9px;
+  background: #ff4d79; transform: rotate(45deg); box-shadow: 0 0 6px #ff4d79;
+}

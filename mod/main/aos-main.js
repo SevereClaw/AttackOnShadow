@@ -14,12 +14,14 @@ try {
 } catch (e) { /* defaults */ }
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+// The only internet the mod itself uses: checking/downloading its own releases.
+const UPDATE_HOSTS = new Set(['api.github.com', 'github.com', 'codeload.github.com', 'objects.githubusercontent.com']);
 
 function isLocal(url) {
   try {
     const u = new URL(url);
     if (u.protocol === 'file:' || u.protocol === 'data:' || u.protocol === 'blob:' || u.protocol === 'devtools:') return true;
-    return LOCAL_HOSTS.has(u.hostname);
+    return LOCAL_HOSTS.has(u.hostname) || UPDATE_HOSTS.has(u.hostname);
   } catch (e) {
     return false;
   }
@@ -117,4 +119,96 @@ ipcMain.on('aos-scale', (event, msg) => {
   }
   if (msg.action !== 'get') saveWindowPrefs(prefs);
   event.sender.send('aos-scale', { percent: Math.round(currentRatio(win) * 100), pref: prefs.scale });
+});
+
+// ---------- mod updates (GitHub releases) ----------
+const { net, shell } = require('electron');
+const os = require('os');
+const childProcess = require('child_process');
+
+function modInfo() {
+  try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8')); }
+  catch (e) { return { version: '0.0.0', repo: 'SevereClaw/AttackOnShadow' }; }
+}
+function cmpVersion(a, b) {
+  const pa = String(a).replace(/^v/i, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  const pb = String(b).replace(/^v/i, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0) ? 1 : -1;
+  }
+  return 0;
+}
+function httpGet(url, asBuffer) {
+  return new Promise((resolve, reject) => {
+    const req = net.request({ url, redirect: 'follow' });
+    req.setHeader('User-Agent', 'AttackOnShadow-updater');
+    if (!asBuffer) req.setHeader('Accept', 'application/vnd.github+json');
+    req.on('response', (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error('HTTP ' + res.statusCode));
+        resolve(asBuffer ? buf : JSON.parse(buf.toString('utf8')));
+      });
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+let latestRelease = null;
+async function checkUpdate() {
+  const info = modInfo();
+  const rel = await httpGet('https://api.github.com/repos/' + info.repo + '/releases/latest');
+  latestRelease = rel;
+  const latest = String(rel.tag_name || '').replace(/^v/i, '');
+  return {
+    state: cmpVersion(latest, info.version) > 0 ? 'available' : 'latest',
+    current: info.version, latest, name: rel.name || rel.tag_name, notes: rel.body || '', url: rel.html_url,
+  };
+}
+function findFile(dir, rel, depth) {
+  if (fs.existsSync(path.join(dir, rel))) return path.join(dir, rel);
+  if (depth <= 0) return null;
+  for (const n of fs.readdirSync(dir)) {
+    const p = path.join(dir, n);
+    if (fs.statSync(p).isDirectory()) { const f = findFile(p, rel, depth - 1); if (f) return f; }
+  }
+  return null;
+}
+async function installUpdate(send) {
+  if (process.platform !== 'win32') throw new Error('Обновление из панели работает только на Windows');
+  if (!latestRelease) await checkUpdate();
+  const tag = String(latestRelease.tag_name || 'latest').replace(/[^\w.-]/g, '');
+  const work = path.join(os.tmpdir(), 'aos-update', tag);
+  fs.rmSync(work, { recursive: true, force: true });
+  fs.mkdirSync(work, { recursive: true });
+  send({ state: 'downloading' });
+  const zip = path.join(work, 'mod.zip');
+  fs.writeFileSync(zip, await httpGet(latestRelease.zipball_url, true));
+  send({ state: 'extracting' });
+  const q = (p) => "'" + p.replace(/'/g, "''") + "'";
+  childProcess.execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+    'Expand-Archive -LiteralPath ' + q(zip) + ' -DestinationPath ' + q(path.join(work, 'x')) + ' -Force'], { windowsHide: true });
+  const runCmd = findFile(path.join(work, 'x'), path.join('patch', 'run.cmd'), 2);
+  if (!runCmd) throw new Error('В архиве нет patch\\run.cmd');
+  send({ state: 'installing' });
+  // run.cmd closes the driver, patches it (asking for admin if needed) and starts it again
+  const exe = app.getPath('exe');
+  const env = Object.assign({}, process.env); delete env.ELECTRON_RUN_AS_NODE;
+  childProcess.spawn('cmd.exe', ['/c', 'start "AttackOnShadow update" "' + runCmd + '" install "' + exe + '" --relaunch'],
+    { detached: true, stdio: 'ignore', windowsVerbatimArguments: true, env }).unref();
+}
+
+ipcMain.on('aos-update', async (event, msg) => {
+  const send = (v) => { try { event.sender.send('aos-update', v); } catch (e) { /* window gone */ } };
+  try {
+    if (!msg || msg.action === 'info') send({ state: 'idle', current: modInfo().version });
+    else if (msg.action === 'check') { send({ state: 'checking' }); send(await checkUpdate()); }
+    else if (msg.action === 'install') await installUpdate(send);
+    else if (msg.action === 'notes' && latestRelease) shell.openExternal(latestRelease.html_url);
+  } catch (e) {
+    send({ state: 'error', error: String(e && e.message || e), current: modInfo().version });
+  }
 });

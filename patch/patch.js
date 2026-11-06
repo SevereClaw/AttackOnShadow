@@ -152,6 +152,9 @@ function install(app) {
   if (fs.existsSync(cfgPath)) { try { cfg = Object.assign(cfg, JSON.parse(read(cfgPath))); } catch (e) { /* reset */ } }
   write(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
   fs.copyFileSync(path.join(MOD_ROOT, 'main', 'aos-main.js'), path.join(aosDir, 'aos-main.js'));
+  fs.copyFileSync(path.join(MOD_ROOT, 'version.json'), path.join(aosDir, 'version.json'));
+  const modVersion = JSON.parse(read(path.join(MOD_ROOT, 'version.json'))).version;
+  log('Мод: AttackOnShadow v' + modVersion);
 
   // renderer files
   const distAos = path.join(app, 'dist', 'aos');
@@ -203,7 +206,7 @@ function install(app) {
     write(c, JSON.stringify(j, null, 4));
   }
 
-  write(path.join(aosDir, 'INSTALLED'), JSON.stringify({ mod: 'AttackOnShadow', driver: pkg.version, date: new Date().toISOString() }) + '\n');
+  write(path.join(aosDir, 'INSTALLED'), JSON.stringify({ mod: 'AttackOnShadow', version: modVersion, driver: pkg.version, date: new Date().toISOString() }) + '\n');
   log('');
   log('Готово. Офлайн-режим: ' + (cfg.offline ? 'включён' : 'выключен') + ' (aos\\config.json).');
 }
