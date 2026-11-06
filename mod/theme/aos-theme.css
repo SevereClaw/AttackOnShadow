@@ -1,0 +1,98 @@
+/* AttackOnShadow — Persona 3 Reload theme. Colors are remapped by aos-theme.js;
+   this file adds the shapes, the background and the typography. */
+
+:root {
+  --aos-navy-0: #020a26;
+  --aos-navy-1: #061a4d;
+  --aos-navy-2: #0b2d7d;
+  --aos-blue: #1f6bff;
+  --aos-cyan: #29d3ff;
+  --aos-ice: #d8ecff;
+  --aos-white: #ffffff;
+}
+
+/* Typography: condensed bold like the P3R menus. Bahnschrift ships with Windows 10/11. */
+html.aos, html.aos body, html.aos #root, html.aos #root * {
+  font-family: "Bahnschrift SemiBold SemiConden", "Bahnschrift SemiCondensed", "Bahnschrift",
+    "Segoe UI Semibold", "Segoe UI", sans-serif !important;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- background ---------- */
+html.aos .css-13nmosr::before {
+  background:
+    linear-gradient(115deg, transparent 0 58%, rgba(120, 200, 255, 0.07) 58% 71%, transparent 71%),
+    linear-gradient(115deg, transparent 0 73%, rgba(41, 211, 255, 0.10) 73% 74.2%, transparent 74.2%),
+    radial-gradient(ellipse 70% 55% at 88% 6%, rgba(90, 180, 255, 0.38), transparent 70%),
+    radial-gradient(ellipse 60% 60% at 4% 100%, rgba(31, 107, 255, 0.40), transparent 70%),
+    repeating-radial-gradient(circle at 80% 18%, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 38px),
+    linear-gradient(165deg, var(--aos-navy-2) 0%, var(--aos-navy-1) 42%, var(--aos-navy-0) 100%) !important;
+}
+
+/* ---------- main navigation tabs ---------- */
+html.aos .aos-tab {
+  position: relative;
+  z-index: 0;
+  font-style: italic;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  border-bottom-color: transparent !important;
+}
+html.aos .css-1a65vc5.aos-tab {
+  width: auto !important;
+  min-width: 96px;
+  padding: 0 16px !important;
+  font-size: 19px !important;
+  text-align: center;
+}
+html.aos .aos-tab::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 3px -2px 1px -2px;
+  transform: skewX(-18deg);
+  background: transparent;
+}
+html.aos .aos-tab:hover { color: var(--aos-white) !important; }
+html.aos .aos-tab:hover::before { background: rgba(41, 211, 255, 0.14); }
+html.aos .aos-tab.aos-tab-on { color: var(--aos-navy-1) !important; }
+html.aos .aos-tab.aos-tab-on::before {
+  background: var(--aos-white);
+  box-shadow: 5px 4px 0 var(--aos-cyan);
+}
+
+/* the tab row container and its parents clip the wider labels */
+html.aos div:has(> div > .css-1a65vc5),
+html.aos div:has(> .css-1a65vc5) { overflow: visible !important; width: auto !important; }
+
+/* ---------- panels ---------- */
+html.aos .aos-panel {
+  background: linear-gradient(135deg, rgba(14, 46, 130, 0.62), rgba(4, 14, 46, 0.78)) !important;
+  border-left: 3px solid var(--aos-cyan) !important;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+  box-shadow: inset 0 1px 0 rgba(216, 236, 255, 0.08);
+}
+
+/* ---------- icons baked into the app as teal PNGs ---------- */
+html.aos .aos-icon { filter: hue-rotate(20deg) saturate(1.25) brightness(1.05); }
+html.aos img.css-1r5f8pq { filter: none; } /* device photo */
+
+/* ---------- sliders (speed / brightness / DPI) ---------- */
+html.aos .css-fn0fyj { background: rgba(120, 180, 255, 0.35) !important; }
+
+/* ---------- inputs & misc ---------- */
+html.aos ::selection { background: var(--aos-cyan); color: var(--aos-navy-0); }
+html.aos input, html.aos textarea { caret-color: var(--aos-cyan); }
+html.aos ::-webkit-scrollbar { width: 8px; height: 8px; }
+html.aos ::-webkit-scrollbar-track { background: rgba(2, 10, 38, 0.6); }
+html.aos ::-webkit-scrollbar-thumb { background: var(--aos-blue); }
+html.aos ::-webkit-scrollbar-thumb:hover { background: var(--aos-cyan); }
+
+/* toast notifications */
+html.aos .Toastify__toast {
+  background: var(--aos-navy-1) !important;
+  color: var(--aos-ice) !important;
+  border-left: 4px solid var(--aos-cyan);
+  border-radius: 0 !important;
+  font-style: italic;
+}
