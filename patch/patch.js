@@ -57,8 +57,19 @@ function companyConfigs(app) {
   return fs.readdirSync(dir).map((d) => path.join(dir, d, 'CONFIG.json')).filter((p) => fs.existsSync(p));
 }
 
+const LOGOS = ['topnav_logo.png', 'login_logo.png', 'default_logo.png', 'APP.png', 'icon.png'];
+
+function companyLogos(app) {
+  const out = [];
+  for (const c of companyConfigs(app)) for (const f of LOGOS) {
+    const p = path.join(path.dirname(c), f);
+    if (fs.existsSync(p)) out.push(p);
+  }
+  return out;
+}
+
 function targets(app) {
-  return [path.join(app, 'dist', 'index.html'), path.join(app, 'main_dist', 'main.js'), bundlePath(app), ...companyConfigs(app)];
+  return [path.join(app, 'dist', 'index.html'), path.join(app, 'main_dist', 'main.js'), bundlePath(app), ...companyConfigs(app), ...companyLogos(app)];
 }
 
 // ---------- string patches for the minified renderer bundle ----------
@@ -91,6 +102,10 @@ function patchBundle(src) {
     '死区设定': 'Мёртвая зона',
     '未设置功能': 'Не задано',
     '检查更新': 'Проверить',
+    '高级设置': 'Расширенные',
+    '模拟演示': 'Демонстрация',
+    '速度': 'Скорость',
+    '亮度': 'Яркость',
   };
   for (const key of Object.keys(ru)) {
     const re = new RegExp('([,{]' + key + ':\\{中文简体:"[^"]*"[^{}]*?俄语:")([^"]*)(")');
@@ -116,6 +131,7 @@ function install(app) {
   // back up the originals
   const files = targets(app);
   for (const f of files) {
+    if (/\.png$/i.test(f)) continue;
     if (read(f).indexOf('AttackOnShadow') !== -1) throw new Error('Файл уже пропатчен, но бэкапа нет: ' + f + '. Переустанови драйвер начисто.');
   }
   for (const f of files) {
@@ -149,9 +165,23 @@ function install(app) {
   html = html.replace('</style>', '</style>' + inject).replace(/<title>[^<]*<\/title>/, '<title>AttackOnShadow</title><!--' + MARK + '-->');
   write(indexPath, html);
 
-  // main process: offline guard
+  // main process: offline guard + window icon; tray menu labels in Russian
+  // (the stock ones are Chinese until the UI loads and sends translations)
   const mainPath = path.join(app, 'main_dist', 'main.js');
-  write(mainPath, MARK + 'try{require(require("path").join(__dirname,"..","aos","aos-main.js"))}catch(e){console.error("[AttackOnShadow]",e)}\n' + read(mainPath));
+  let mainSrc = read(mainPath);
+  for (const [zh, ru] of [['显示', 'Показать'], ['隐藏', 'Скрыть'], ['退出', 'Выход']]) {
+    const from = 'label: "' + zh + '"';
+    if (mainSrc.indexOf(from) === -1) warn('пункт трея не найден:', zh);
+    else mainSrc = mainSrc.split(from).join('label: "' + ru + '"');
+  }
+  write(mainPath, MARK + 'try{require(require("path").join(__dirname,"..","aos","aos-main.js"))}catch(e){console.error("[AttackOnShadow]",e)}\n' + mainSrc);
+  fs.copyFileSync(path.join(MOD_ROOT, 'assets', 'aos-icon.png'), path.join(aosDir, 'aos-icon.png'));
+
+  // logos and tray icon: the butterfly
+  for (const c of companyConfigs(app)) for (const f of LOGOS) {
+    const src = path.join(MOD_ROOT, 'assets', f);
+    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(path.dirname(c), f));
+  }
 
   // renderer bundle
   const bp = bundlePath(app);

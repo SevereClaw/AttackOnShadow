@@ -53,6 +53,7 @@ html.aos .aos-tab::before {
   transform: skewX(-18deg);
   background: transparent;
 }
+html.aos .aos-tab:not(.aos-tab-on) { text-shadow: 0 1px 3px rgba(2, 10, 38, 0.7); }
 html.aos .aos-tab:hover { color: var(--aos-white) !important; }
 html.aos .aos-tab:hover::before { background: rgba(41, 211, 255, 0.14); }
 html.aos .aos-tab.aos-tab-on { color: var(--aos-navy-1) !important; }

@@ -90,7 +90,11 @@
   var origInsert = CSSStyleSheet.prototype.insertRule;
   CSSStyleSheet.prototype.insertRule = function (rule, index) {
     var own = this.ownerNode && this.ownerNode.id === 'aos-theme-css';
-    return origInsert.call(this, own ? rule : remapText(rule), index);
+    // The background-colour layer (a ::before at z-index -2) carries the colour the
+    // user picked in Info -> Appearance: keep it exactly as chosen. The default
+    // colour is replaced by the P3R background in aos-theme.css instead.
+    var userBg = typeof rule === 'string' && rule.indexOf('::before') !== -1 && rule.indexOf('z-index:-2') !== -1;
+    return origInsert.call(this, own || userBg ? rule : remapText(rule), index);
   };
 
   function fixStyleTag(node) {
@@ -116,7 +120,9 @@
       if (el.__aosImg) continue;
       if (el.tagName === 'IMG') {
         el.__aosImg = true;
-        if (el.width * el.height < 4096) el.classList.add('aos-icon');
+        var src = el.getAttribute('src') || '';
+        // logos and device photos live in company/; only tint the stock UI icons
+        if (src.indexOf('company') === -1 && el.width * el.height < 4096) el.classList.add('aos-icon');
         continue;
       }
       var bi = el.style && el.style.backgroundImage;
