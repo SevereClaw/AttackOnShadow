@@ -180,6 +180,16 @@ function install(app) {
     if (mainSrc.indexOf(from) === -1) warn('пункт трея не найден:', zh);
     else mainSrc = mainSrc.split(from).join('label: "' + ru + '"');
   }
+  // --aos-hidden: start straight into the tray (autostart, silent updates)
+  const showFrom = 'if (mainWindow) mainWindow.show(); // 初始化后再显示';
+  if (mainSrc.indexOf(showFrom) === -1) warn('запуск в трей: фрагмент не найден');
+  else mainSrc = mainSrc.replace(showFrom, "if (mainWindow && process.argv.indexOf('--aos-hidden') === -1) mainWindow.show();");
+  const loginSet = 'openAsHidden: true,';
+  const loginGet = 'getLoginItemSettings().openAtLogin';
+  if (mainSrc.indexOf(loginSet) === -1 || mainSrc.indexOf(loginGet) === -1) warn('автозапуск в трей: фрагмент не найден');
+  else mainSrc = mainSrc.replace(loginSet, "openAsHidden: true, args: ['--aos-hidden'],")
+    .replace(loginGet, "getLoginItemSettings({ args: ['--aos-hidden'] }).openAtLogin");
+
   // window size comes from the mod's scale setting (aos-main.js)
   const ratioFrom = '  ratio = r > 1 ? 1 : r;';
   if (mainSrc.indexOf(ratioFrom) === -1) warn('размер окна: фрагмент не найден, масштаб будет только через Ctrl+колесо');

@@ -1,53 +1,75 @@
-# Publishes a GitHub release whenever mod/version.json gets a version that has
-# no tag yet. The in-app updater (МОД → Обновления мода) picks it up.
-name: Release
+# Builds AttackOnShadow.exe on every change and, when mod/version.json has a
+# version without a tag yet, publishes a GitHub release with the exe attached.
+# The in-app updater (МОД → Обновления мода) downloads that exe and runs it silently.
+name: Build & Release
 
 on:
   push:
     branches: [main]
-    paths: [mod/version.json]
+    paths: [mod/**, patch/**, setup/**, .github/workflows/release.yml]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Syntax check (JS)
+        run: |
+          foreach ($f in 'mod/theme/aos-theme.js','mod/theme/aos-features.js','mod/main/aos-main.js','patch/patch.js') { node --check $f; if ($LASTEXITCODE) { exit 1 } }
+
+      - name: Build exe
+        run: ./setup/build.ps1
+
+      - name: Smoke test
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'aos-extract'
+          $p = Start-Process setup/out/AttackOnShadow.exe -ArgumentList '--extract', "`"$dir`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "extract exit code $($p.ExitCode)" }
+          foreach ($f in 'mod/version.json','mod/main/aos-main.js','mod/theme/aos-theme.css','mod/assets/icon.png','patch/patch.js') {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "missing $f in payload" }
+          }
+          # the patcher must refuse cleanly when there is no driver
+          node (Join-Path $dir 'patch/patch.js') status (Join-Path $env:RUNNER_TEMP 'nothing-here')
+          if ($LASTEXITCODE -ne 2) { throw "patch.js status: expected exit 2, got $LASTEXITCODE" }
+          $global:LASTEXITCODE = 0
+          Write-Host 'payload OK'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AttackOnShadow-exe
+          path: setup/out/AttackOnShadow.exe
+
       - name: Read version
         id: v
-        run: echo "version=$(jq -r .version mod/version.json)" >> "$GITHUB_OUTPUT"
-
-      - name: Skip if tag exists
-        id: check
         run: |
-          if git rev-parse "v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Release notes
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          if [ -f "docs/release-notes/v${{ steps.v.outputs.version }}.md" ]; then
-            cp "docs/release-notes/v${{ steps.v.outputs.version }}.md" notes.md
-          else
-            git log --pretty='- %s' "$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)"..HEAD > notes.md
-          fi
-          printf '\n\n**Установка:** скачай Source code (zip), распакуй, запусти `install.bat`. Уже стоит мод — обнови из панели: МОД → Обновления мода.\n' >> notes.md
+          $v = (Get-Content mod/version.json -Raw | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+          git rev-parse "v$v" 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) { "exists=true" >> $env:GITHUB_OUTPUT } else { "exists=false" >> $env:GITHUB_OUTPUT }
+          $global:LASTEXITCODE = 0
 
       - name: Publish release
-        if: steps.check.outputs.exists == 'false'
+        if: steps.v.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ steps.v.outputs.version }}" \
-            --target "${{ github.sha }}" \
-            --title "AttackOnShadow v${{ steps.v.outputs.version }}" \
-            --notes-file notes.md
+          $v = '${{ steps.v.outputs.version }}'
+          $notesFile = "docs/release-notes/v$v.md"
+          if (Test-Path $notesFile) { Copy-Item $notesFile notes.md }
+          else {
+            $prev = git describe --tags --abbrev=0 2>$null
+            $range = if ($prev) { "$prev..HEAD" } else { 'HEAD' }
+            git log --pretty='- %s' $range | Set-Content notes.md -Encoding utf8
+          }
+          Add-Content notes.md "`n`n**Установка:** скачай **AttackOnShadow.exe** ниже и запусти. Уже стоит мод — он обновится сам (или: МОД → Обновления мода)." -Encoding utf8
+          gh release create "v$v" setup/out/AttackOnShadow.exe --target "${{ github.sha }}" --title "AttackOnShadow v$v" --notes-file notes.md

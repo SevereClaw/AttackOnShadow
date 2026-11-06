@@ -190,14 +190,36 @@ function findFile(dir, rel, depth) {
   }
   return null;
 }
-async function installUpdate(send) {
+let installing = false;
+async function installUpdate(send, hidden) {
   if (process.platform !== 'win32') throw new Error('Обновление из панели работает только на Windows');
+  if (installing) return;
+  installing = true;
+  try { await doInstallUpdate(send, hidden); } catch (e) { installing = false; throw e; }
+}
+async function doInstallUpdate(send, hidden) {
   if (!latestRelease) await checkUpdate();
   const tag = String(latestRelease.tag_name || 'latest').replace(/[^\w.-]/g, '');
   const work = path.join(os.tmpdir(), 'aos-update', tag);
   fs.rmSync(work, { recursive: true, force: true });
   fs.mkdirSync(work, { recursive: true });
   send({ state: 'downloading' });
+  const exe = app.getPath('exe');
+  const env = Object.assign({}, process.env); delete env.ELECTRON_RUN_AS_NODE;
+
+  // Preferred: the release's AttackOnShadow.exe in silent mode. It closes the
+  // driver, patches it (UAC prompt only for Program Files) and starts it again.
+  const asset = (latestRelease.assets || []).find((a) => /^AttackOnShadow.*\.exe$/i.test(a.name));
+  if (asset) {
+    const setup = path.join(work, 'AttackOnShadow.exe');
+    fs.writeFileSync(setup, await httpGet(asset.browser_download_url, true));
+    send({ state: 'installing' });
+    childProcess.spawn(setup, ['--install', '--silent', hidden ? '--relaunch-hidden' : '--relaunch', '--driver', exe],
+      { detached: true, stdio: 'ignore', env }).unref();
+    return;
+  }
+
+  // Fallback (releases without the exe): source archive + its run.cmd.
   const zip = path.join(work, 'mod.zip');
   fs.writeFileSync(zip, await httpGet(latestRelease.zipball_url, true));
   send({ state: 'extracting' });
@@ -208,8 +230,6 @@ async function installUpdate(send) {
   if (!runCmd) throw new Error('В архиве нет patch\\run.cmd');
   send({ state: 'installing' });
   // run.cmd closes the driver, patches it (asking for admin if needed) and starts it again
-  const exe = app.getPath('exe');
-  const env = Object.assign({}, process.env); delete env.ELECTRON_RUN_AS_NODE;
   childProcess.spawn('cmd.exe', ['/c', 'start "AttackOnShadow update" "' + runCmd + '" install "' + exe + '" --relaunch'],
     { detached: true, stdio: 'ignore', windowsVerbatimArguments: true, env }).unref();
 }
@@ -219,7 +239,13 @@ ipcMain.on('aos-update', async (event, msg) => {
   try {
     if (!msg || msg.action === 'info') send({ state: 'idle', current: modInfo().version });
     else if (msg.action === 'check') { send({ state: 'checking' }); send(await checkUpdate()); }
-    else if (msg.action === 'install') await installUpdate(send);
+    else if (msg.action === 'install') await installUpdate(send, false);
+    else if (msg.action === 'auto-install') {
+      // automatic updates only while the driver sits in the tray and no game is running
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win && !win.isVisible() && !msg.gameRunning && latestRelease &&
+          cmpVersion(String(latestRelease.tag_name).replace(/^v/i, ''), modInfo().version) > 0) await installUpdate(send, true);
+    }
     else if (msg.action === 'notes' && latestRelease) shell.openExternal(latestRelease.html_url);
   } catch (e) {
     send({ state: 'error', error: String(e && e.message || e), current: modInfo().version });

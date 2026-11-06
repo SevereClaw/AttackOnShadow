@@ -24,7 +24,7 @@
   var SOUND_DIRS = [path.join(USER_DIR, 'aos-sounds'), path.join(remote.app.getAppPath(), 'aos', 'sounds')];
 
   // ---------- settings ----------
-  var settings = { auto: { enabled: true, rules: [], fallback: null, interval: 3 }, sounds: { enabled: true, volume: 60 }, updates: { auto: true, lastCheck: 0 } };
+  var settings = { auto: { enabled: true, rules: [], fallback: null, interval: 3 }, sounds: { enabled: true, volume: 60 }, updates: { auto: true, autoInstall: true, lastCheck: 0 } };
   try {
     var saved = JSON.parse(fs.readFileSync(SETTINGS, 'utf8'));
     if (saved.auto) Object.assign(settings.auto, saved.auto);
@@ -205,9 +205,18 @@
     renderUpdate();
   });
   ipc.send('aos-update', { action: 'info' });
-  if (settings.updates.auto && Date.now() - (settings.updates.lastCheck || 0) > 24 * 3600 * 1000) {
-    setTimeout(function () { ipc.send('aos-update', { action: 'check' }); }, 8000);
+  // daily check (also while the driver just sits in the tray for days)
+  function checkIfDue() {
+    if (settings.updates.auto && Date.now() - (settings.updates.lastCheck || 0) > 24 * 3600 * 1000) ipc.send('aos-update', { action: 'check' });
   }
+  setTimeout(checkIfDue, 8000);
+  setInterval(checkIfDue, 3600 * 1000);
+  // automatic install: aos-main.js only does it while the window is hidden in
+  // the tray and no game from the auto-profile rules is running
+  setInterval(function () {
+    if (upd.state === 'available' && settings.updates.autoInstall)
+      ipc.send('aos-update', { action: 'auto-install', gameRunning: !!state.matched });
+  }, 5000);
 
   // ---------- mod panel ----------
   function h(tag, attrs, children) {
@@ -326,6 +335,10 @@
     autoUpd.firstChild.checked = !!settings.updates.auto;
     autoUpd.firstChild.addEventListener('change', function () { settings.updates.auto = this.checked; save(); });
     up.appendChild(autoUpd);
+    var autoInst = h('label', { class: 'aos-check' }, [h('input', { type: 'checkbox' }), ' Ставить сами (когда драйвер в трее и игра не запущена)']);
+    autoInst.firstChild.checked = !!settings.updates.autoInstall;
+    autoInst.firstChild.addEventListener('change', function () { settings.updates.autoInstall = this.checked; save(); });
+    up.appendChild(autoInst);
     panel.appendChild(up);
 
     modal.appendChild(panel);
@@ -408,7 +421,7 @@
       idle: 'Проверка идёт только на GitHub, остальная сеть по-прежнему закрыта.',
       checking: 'Проверяю…',
       latest: 'Стоит последняя версия.',
-      available: 'Доступна v' + upd.latest + (upd.name && upd.name !== 'v' + upd.latest ? ' — ' + upd.name : '') + '.',
+      available: 'Доступна v' + upd.latest + '.' + (settings.updates.autoInstall ? ' Встанет сама, когда свернёшь драйвер в трей.' : ''),
       downloading: 'Скачиваю…',
       extracting: 'Распаковываю…',
       installing: 'Устанавливаю: драйвер закроется и откроется снова.',
