@@ -160,7 +160,20 @@ function httpGet(url, asBuffer) {
 let latestRelease = null;
 async function checkUpdate() {
   const info = modInfo();
-  const rel = await httpGet('https://api.github.com/repos/' + info.repo + '/releases/latest');
+  let rel;
+  try {
+    rel = await httpGet('https://api.github.com/repos/' + info.repo + '/releases/latest');
+  } catch (e) {
+    if (!/HTTP 404/.test(String(e && e.message))) throw e;
+    // no GitHub release yet: fall back to the newest vX.Y.Z git tag
+    const tags = (await httpGet('https://api.github.com/repos/' + info.repo + '/tags?per_page=100'))
+      .filter((t) => /^v?\d+(\.\d+)*$/.test(t.name))
+      .sort((a, b) => cmpVersion(b.name, a.name));
+    if (!tags.length) throw new Error('на GitHub нет ни релизов, ни тегов версий');
+    const t = tags[0];
+    rel = { tag_name: t.name, name: t.name, body: '', zipball_url: t.zipball_url,
+      html_url: 'https://github.com/' + info.repo + '/tree/' + encodeURIComponent(t.name) };
+  }
   latestRelease = rel;
   const latest = String(rel.tag_name || '').replace(/^v/i, '');
   return {
