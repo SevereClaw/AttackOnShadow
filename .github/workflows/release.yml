@@ -1,0 +1,53 @@
+# Publishes a GitHub release whenever mod/version.json gets a version that has
+# no tag yet. The in-app updater (МОД → Обновления мода) picks it up.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [mod/version.json]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: v
+        run: echo "version=$(jq -r .version mod/version.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if tag exists
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Release notes
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          if [ -f "docs/release-notes/v${{ steps.v.outputs.version }}.md" ]; then
+            cp "docs/release-notes/v${{ steps.v.outputs.version }}.md" notes.md
+          else
+            git log --pretty='- %s' "$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)"..HEAD > notes.md
+          fi
+          printf '\n\n**Установка:** скачай Source code (zip), распакуй, запусти `install.bat`. Уже стоит мод — обнови из панели: МОД → Обновления мода.\n' >> notes.md
+
+      - name: Publish release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.v.outputs.version }}" \
+            --target "${{ github.sha }}" \
+            --title "AttackOnShadow v${{ steps.v.outputs.version }}" \
+            --notes-file notes.md
