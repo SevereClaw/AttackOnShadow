@@ -44,6 +44,35 @@ jobs:
           $global:LASTEXITCODE = 0
           Write-Host 'payload OK'
 
+      - name: End-to-end test (silent install / uninstall on a fake driver)
+        run: |
+          # fake driver: node.exe named like the driver runs patch.js the same way
+          # the real Electron does with ELECTRON_RUN_AS_NODE=1
+          $d = Join-Path $env:RUNNER_TEMP 'Fake Driver'
+          $app = Join-Path $d 'resources/app'
+          New-Item -ItemType Directory -Force "$app/main_dist", "$app/dist/static/js", "$app/company/company_AttackShark" | Out-Null
+          Copy-Item (Get-Command node).Source (Join-Path $d 'Attack Shark Driver.exe')
+          '{"name":"Attack Shark Driver","version":"2.1.79"}' | Set-Content "$app/package.json"
+          'console.log(1)' | Set-Content "$app/main_dist/main.js"
+          '<!doctype html><html><head><title>x</title><style>a{}</style></head><body></body></html>' | Set-Content "$app/dist/index.html"
+          'var x=1;' | Set-Content "$app/dist/static/js/main_test.js"
+          '{"company":"AttackShark"}' | Set-Content "$app/company/company_AttackShark/CONFIG.json"
+          $orig = Get-FileHash "$app/dist/index.html"
+
+          $p = Start-Process setup/out/AttackOnShadow.exe -ArgumentList '--install','--silent','--driver',"`"$d`"" -Wait -PassThru
+          Get-Content (Join-Path $env:TEMP 'aos-setup.log') -Encoding utf8
+          if ($p.ExitCode -ne 0) { throw "install exit code $($p.ExitCode)" }
+          if (-not (Test-Path "$app/aos/INSTALLED")) { throw 'INSTALLED marker missing' }
+          if (-not (Select-String -Path "$app/dist/index.html" -Pattern 'aos-features.js' -Quiet)) { throw 'index.html not patched' }
+          Get-Content "$app/aos/INSTALLED"
+
+          $p = Start-Process setup/out/AttackOnShadow.exe -ArgumentList '--uninstall','--silent','--driver',"`"$d`"" -Wait -PassThru
+          Get-Content (Join-Path $env:TEMP 'aos-setup.log') -Encoding utf8
+          if ($p.ExitCode -ne 0) { throw "uninstall exit code $($p.ExitCode)" }
+          if ((Get-FileHash "$app/dist/index.html").Hash -ne $orig.Hash) { throw 'index.html not restored' }
+          if (Test-Path "$app/aos") { throw 'aos folder left behind' }
+          Write-Host 'e2e OK'
+
       - uses: actions/upload-artifact@v4
         with:
           name: AttackOnShadow-exe
