@@ -15,7 +15,7 @@ try {
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 // The only internet the mod itself uses: checking/downloading its own releases.
-const UPDATE_HOSTS = new Set(['api.github.com', 'github.com', 'codeload.github.com', 'objects.githubusercontent.com']);
+const UPDATE_HOSTS = new Set(['api.github.com', 'github.com', 'codeload.github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']);
 
 function isLocal(url) {
   try {

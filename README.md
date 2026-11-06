@@ -67,7 +67,7 @@ Node.js ставить не нужно: патчер выполняется вс
 
 Поставь `false` и перезапусти `install.bat`, если нужны обновления прошивки из облака. Вкладки аккаунта и шаринга останутся скрыты в любом случае.
 
-Единственное исключение в офлайн-режиме — хосты GitHub (`api.github.com`, `github.com`, `codeload.github.com`, `objects.githubusercontent.com`): через них мод проверяет и скачивает свои релизы.
+Единственное исключение в офлайн-режиме — хосты GitHub (`api.github.com`, `github.com`, `codeload.github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com`): через них мод проверяет и скачивает свои релизы.
 
 ## Как это устроено
 
