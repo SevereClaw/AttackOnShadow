@@ -17,6 +17,8 @@ namespace AttackOnShadow.Device
         readonly bool demo;
         IKeyboard kb;
         bool busy;
+        int failures;
+        string lastError;
 
         public IKeyboard Keyboard => kb;
         public bool Connected => kb != null;
@@ -44,13 +46,14 @@ namespace AttackOnShadow.Device
                 if (kb != null)
                 {
                     int l = await kb.GetLayerAsync();
+                    failures = 0;
                     if (l != Layer) { Layer = l; Raise(); }
                 }
             }
             catch (Exception e)
             {
-                Log.Info("device lost: " + e.Message);
-                Drop("Клавиатура отключена");
+                Log.Info("poll failed: " + e.Message);
+                if (++failures >= 2) Drop("Связь потеряна: " + e.Message);
             }
             finally { busy = false; }
         }
@@ -58,23 +61,24 @@ namespace AttackOnShadow.Device
         async Task Connect()
         {
             if (demo) { kb = new FakeKeyboard(); Status = "Демо-режим"; Raise(); return; }
-            var info = await Task.Run(() => K85Keyboard.Find());
-            if (info == null)
+            var cands = await Task.Run(() => K85Keyboard.Candidates());
+            if (cands.Count == 0)
             {
                 if (Status != "Клавиатура не найдена") { Status = "Клавиатура не найдена"; Raise(); }
                 return;
             }
             try
             {
-                kb = K85Keyboard.Open(info);
+                kb = await Task.Run(() => K85Keyboard.Connect(cands));
+                failures = 0;
                 Status = "Подключена";
-                Log.Info("connected " + info);
                 Raise();
             }
             catch (Exception e)
             {
-                Status = "Нет доступа: " + e.Message;
-                Log.Info("open failed: " + e);
+                string why = "Ошибка USB: " + e.Message;
+                if (why != lastError) { Log.Info("connect failed: " + e.Message); lastError = why; }
+                Status = why.Length > 160 ? why.Substring(0, 160) + "…" : why;
                 Raise();
             }
         }
@@ -99,21 +103,21 @@ namespace AttackOnShadow.Device
                 Raise();
                 return Layer == layer;
             }
-            catch (Exception e) { Log.Info("set layer failed: " + e.Message); Drop("Клавиатура отключена"); return false; }
+            catch (Exception e) { Log.Info("set layer failed: " + e.Message); Drop("Связь потеряна: " + e.Message); return false; }
         }
 
         public async Task<Lighting> GetLightingAsync()
         {
             if (kb == null) return null;
             try { return await kb.GetLightingAsync(); }
-            catch (Exception e) { Log.Info("get lighting failed: " + e.Message); Drop("Клавиатура отключена"); return null; }
+            catch (Exception e) { Log.Info("get lighting failed: " + e.Message); Drop("Связь потеряна: " + e.Message); return null; }
         }
 
         public async Task<bool> SetLightingAsync(Lighting l)
         {
             if (kb == null) return false;
             try { return await kb.SetLightingAsync(l); }
-            catch (Exception e) { Log.Info("set lighting failed: " + e.Message); Drop("Клавиатура отключена"); return false; }
+            catch (Exception e) { Log.Info("set lighting failed: " + e.Message); Drop("Связь потеряна: " + e.Message); return false; }
         }
 
         void Raise() { if (ui.CheckAccess()) Changed?.Invoke(); else ui.BeginInvoke(new Action(() => Changed?.Invoke())); }

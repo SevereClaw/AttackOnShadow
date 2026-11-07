@@ -91,39 +91,49 @@ namespace AttackOnShadow.Hid
             }
         }
 
-        public static HidDevice Open(HidInfo info)
+        public const uint AccessNone = 0, AccessReadWrite = Native.GENERIC_READ | Native.GENERIC_WRITE;
+
+        /// <summary>Opens the interface. Feature reports work with a zero-access handle on most HID stacks.</summary>
+        public static HidDevice Open(HidInfo info, uint access)
         {
-            var h = Native.CreateFile(info.Path, Native.GENERIC_READ | Native.GENERIC_WRITE, Native.FILE_SHARE_READ | Native.FILE_SHARE_WRITE,
-                IntPtr.Zero, Native.OPEN_EXISTING, 0, IntPtr.Zero);
+            var h = Native.CreateFile(info.Path, access, Native.FILE_SHARE_READ | Native.FILE_SHARE_WRITE, IntPtr.Zero, Native.OPEN_EXISTING, 0, IntPtr.Zero);
             if (h.IsInvalid)
             {
+                int err = Marshal.GetLastWin32Error();
                 h.Dispose();
-                // some HID stacks only allow feature reports through a zero-access handle
-                h = Native.CreateFile(info.Path, 0, Native.FILE_SHARE_READ | Native.FILE_SHARE_WRITE, IntPtr.Zero, Native.OPEN_EXISTING, 0, IntPtr.Zero);
-                if (h.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), "Не удалось открыть устройство");
+                throw new Win32Exception(err, $"CreateFile (доступ {access:X}): {new Win32Exception(err).Message} [{err}]");
             }
             return new HidDevice(h, info);
         }
 
+        /// <summary>Feature report size the interface expects (report id included).</summary>
+        int ReportLength => Info.FeatureReportLength > 0 ? Info.FeatureReportLength : 65;
+
         /// <summary>Sends a feature report. <paramref name="data"/> is the payload without the report id.</summary>
         public void SetFeature(byte[] data, byte reportId = 0)
         {
-            int len = Math.Max(Info.FeatureReportLength, data.Length + 1);
+            int len = ReportLength;
             var buf = new byte[len];
             buf[0] = reportId;
             Array.Copy(data, 0, buf, 1, Math.Min(data.Length, len - 1));
             if (!Native.HidD_SetFeature(handle, buf, buf.Length))
-                throw new IOException("HidD_SetFeature: " + new Win32Exception(Marshal.GetLastWin32Error()).Message);
+            {
+                int err = Marshal.GetLastWin32Error();
+                throw new IOException($"HidD_SetFeature({len}): {new Win32Exception(err).Message} [{err}]");
+            }
         }
 
         /// <summary>Reads a feature report and returns the payload without the report id.</summary>
         public byte[] GetFeature(byte reportId = 0)
         {
-            int len = Math.Max(Info.FeatureReportLength, 65);
+            int len = ReportLength;
             var buf = new byte[len];
             buf[0] = reportId;
             if (!Native.HidD_GetFeature(handle, buf, buf.Length))
-                throw new IOException("HidD_GetFeature: " + new Win32Exception(Marshal.GetLastWin32Error()).Message);
+            {
+                int err = Marshal.GetLastWin32Error();
+                throw new IOException($"HidD_GetFeature({len}): {new Win32Exception(err).Message} [{err}]");
+            }
             var data = new byte[len - 1];
             Array.Copy(buf, 1, data, 0, data.Length);
             return data;
