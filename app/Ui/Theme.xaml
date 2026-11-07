@@ -19,9 +19,10 @@
     <FontFamily x:Key="P3Font">Bahnschrift SemiCondensed, Bahnschrift, Segoe UI</FontFamily>
     <SkewTransform x:Key="Skew" AngleX="-18"/>
 
+    <!-- no Foreground here: an implicit TextBlock style would also hit the text inside
+         buttons and chips and block the navy-on-white colour of selected items -->
     <Style TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource P3Font}"/>
-        <Setter Property="Foreground" Value="{StaticResource Ice}"/>
     </Style>
     <Style x:Key="H1" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource P3Font}"/>

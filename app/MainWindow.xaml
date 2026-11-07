@@ -9,7 +9,7 @@
         <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
     </WindowChrome.WindowChrome>
 
-    <Grid x:Name="Root" ClipToBounds="True">
+    <Grid x:Name="Root" ClipToBounds="True" TextElement.Foreground="{StaticResource Ice}" TextElement.FontFamily="{StaticResource P3Font}">
         <Grid.Background>
             <LinearGradientBrush StartPoint="0.1,0" EndPoint="0.6,1">
                 <GradientStop Color="#0B2D7D" Offset="0"/>
@@ -136,7 +136,7 @@
                     <Border Style="{StaticResource Card}" Margin="0,0,22,0">
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Top">
-                                <CheckBox x:Name="AutoEnabledBox" Content="Переключать слой, когда запущена игра" Checked="AutoEnabled_Changed" Unchecked="AutoEnabled_Changed"/>
+                                <CheckBox x:Name="AutoEnabledBox" Content="Автопереключение слоёв" Checked="AutoEnabled_Changed" Unchecked="AutoEnabled_Changed"/>
                                 <TextBlock x:Name="AutoStatus" Style="{StaticResource Hint}" Margin="0,0,0,14"/>
                                 <TextBlock Style="{StaticResource H2}" Text="Игры"/>
                             </StackPanel>
