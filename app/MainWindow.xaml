@@ -110,7 +110,7 @@
                                     <TextBlock x:Name="KeysHint" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,14,0"
                                                Text="Щелчок — одна клавиша, Ctrl или протяжка — несколько. На клавишах — точка срабатывания в мм."/>
                                 </DockPanel>
-                                <Viewbox Stretch="Uniform" Margin="0,12,0,0" MaxHeight="250" HorizontalAlignment="Left">
+                                <Viewbox Stretch="Uniform" Margin="0,12,0,0" MaxHeight="230" HorizontalAlignment="Left">
                                     <Canvas x:Name="KeyCanvas" Background="Transparent"
                                             MouseLeftButtonDown="KeyCanvas_Down" MouseMove="KeyCanvas_Move" MouseLeftButtonUp="KeyCanvas_Up"/>
                                 </Viewbox>
