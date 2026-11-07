@@ -22,10 +22,11 @@ namespace AttackOnShadow.Device
     public sealed class K85Keyboard : IKeyboard
     {
         readonly HidDevice dev;
+        readonly byte reportId;
         readonly SemaphoreSlim gate = new SemaphoreSlim(1, 1);
         public string Name => "Attack Shark K85";
 
-        K85Keyboard(HidDevice d) { dev = d; }
+        K85Keyboard(HidDevice d, byte id) { dev = d; reportId = id; }
 
         /// <summary>All HID collections of the K85, logged for diagnostics.</summary>
         public static List<HidInfo> Candidates()
@@ -48,24 +49,27 @@ namespace AttackOnShadow.Device
             var errors = new List<string>();
             foreach (var info in candidates)
             {
+                // the report id the collection declares (hidapi puts it in byte 0), then 0 as a fallback
+                var ids = info.FeatureReportIds.Where(b => b != 0).Concat(new byte[] { 0 }).Distinct().ToArray();
+                foreach (byte id in ids)
                 foreach (var access in new[] { HidDevice.AccessNone, HidDevice.AccessReadWrite })
                 {
                     HidDevice dev = null;
                     try
                     {
                         dev = HidDevice.Open(info, access);
-                        var kb = new K85Keyboard(dev);
+                        var kb = new K85Keyboard(dev, id);
                         var r = kb.Query(K85Protocol.GetProfile());
                         int slot = K85Protocol.ParseProfile(r);
-                        Log.Usb($"probe {info} access={access:X}: answer {K85Protocol.Hex(r, 8)} → slot {slot}");
+                        Log.Usb($"probe {info} id={id:X2} access={access:X}: answer {K85Protocol.Hex(r, 8)} → slot {slot}");
                         if (slot < 0 && r.All(b => b == 0)) throw new IOException("пустой ответ");
-                        Log.Info($"connected via {info} access={access:X}");
+                        Log.Info($"connected via {info} id={id:X2} access={access:X}");
                         return kb;
                     }
                     catch (Exception e)
                     {
                         dev?.Dispose();
-                        string msg = $"{info.UsagePage:X4}/{info.Usage:X4} доступ {access:X}: {e.Message}";
+                        string msg = $"{info.UsagePage:X4}/{info.Usage:X4} id {id:X2} доступ {access:X}: {e.Message}";
                         errors.Add(msg);
                         Log.Usb("probe failed " + msg);
                     }
@@ -85,14 +89,14 @@ namespace AttackOnShadow.Device
         {
             Thread.Sleep(10);
             Log.Usb("→ " + K85Protocol.Hex(p, 12));
-            dev.SetFeature(p);
+            dev.SetFeature(p, reportId);
         }
 
         byte[] Query(byte[] p)
         {
             Write(p);
             Thread.Sleep(15);
-            var r = dev.GetFeature();
+            var r = dev.GetFeature(reportId);
             Log.Usb("← " + K85Protocol.Hex(r, 12));
             return r;
         }

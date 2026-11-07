@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -14,7 +15,9 @@ namespace AttackOnShadow.Hid
         public ushort VendorId, ProductId, Version;
         public ushort UsagePage, Usage;
         public int FeatureReportLength;
-        public override string ToString() => $"{VendorId:X4}:{ProductId:X4} up={UsagePage:X4} u={Usage:X4} feat={FeatureReportLength}";
+        public byte[] FeatureReportIds = new byte[0];   // report ids declared for feature reports (empty: none)
+        public override string ToString() =>
+            $"{VendorId:X4}:{ProductId:X4} up={UsagePage:X4} u={Usage:X4} feat={FeatureReportLength} ids=[{string.Join(",", FeatureReportIds.Select(b => b.ToString("X2")))}]";
     }
 
     /// <summary>Minimal Win32 HID access: enumerate interfaces and exchange feature reports.</summary>
@@ -83,12 +86,36 @@ namespace AttackOnShadow.Hid
                             info.UsagePage = caps.UsagePage;
                             info.Usage = caps.Usage;
                             info.FeatureReportLength = caps.FeatureReportByteLength;
+                            info.FeatureReportIds = FeatureIds(pp, caps);
                         }
                     }
                     finally { Native.HidD_FreePreparsedData(pp); }
                 }
                 return info;
             }
+        }
+
+        /// <summary>Report ids used by the collection's feature reports (HIDP_*_CAPS.ReportID sits at byte 2).</summary>
+        static byte[] FeatureIds(IntPtr pp, Native.HIDP_CAPS caps)
+        {
+            const int HidP_Feature = 2, CapsSize = 72;
+            var ids = new SortedSet<byte>();
+            void Read(int count, bool buttons)
+            {
+                if (count <= 0) return;
+                IntPtr buf = Marshal.AllocHGlobal(count * CapsSize);
+                try
+                {
+                    ushort n = (ushort)count;
+                    int st = buttons ? Native.HidP_GetButtonCaps(HidP_Feature, buf, ref n, pp) : Native.HidP_GetValueCaps(HidP_Feature, buf, ref n, pp);
+                    if (st != Native.HIDP_STATUS_SUCCESS) return;
+                    for (int i = 0; i < n; i++) ids.Add(Marshal.ReadByte(buf, i * CapsSize + 2));
+                }
+                finally { Marshal.FreeHGlobal(buf); }
+            }
+            Read(caps.NumberFeatureValueCaps, false);
+            Read(caps.NumberFeatureButtonCaps, true);
+            return ids.ToArray();
         }
 
         public const uint AccessNone = 0, AccessReadWrite = Native.GENERIC_READ | Native.GENERIC_WRITE;
@@ -169,6 +196,8 @@ namespace AttackOnShadow.Hid
             [DllImport("hid.dll", SetLastError = true)] public static extern bool HidD_GetPreparsedData(SafeFileHandle h, out IntPtr pp);
             [DllImport("hid.dll")] public static extern bool HidD_FreePreparsedData(IntPtr pp);
             [DllImport("hid.dll")] public static extern int HidP_GetCaps(IntPtr pp, out HIDP_CAPS caps);
+            [DllImport("hid.dll")] public static extern int HidP_GetValueCaps(int reportType, IntPtr caps, ref ushort length, IntPtr pp);
+            [DllImport("hid.dll")] public static extern int HidP_GetButtonCaps(int reportType, IntPtr caps, ref ushort length, IntPtr pp);
             [DllImport("hid.dll", SetLastError = true)] public static extern bool HidD_SetFeature(SafeFileHandle h, byte[] buf, int len);
             [DllImport("hid.dll", SetLastError = true)] public static extern bool HidD_GetFeature(SafeFileHandle h, byte[] buf, int len);
 
