@@ -18,6 +18,7 @@ namespace AttackOnShadow.Device
         IKeyboard kb;
         bool busy;
         int failures;
+        DateTime lastPoll = DateTime.MinValue;
         string lastError;
 
         public IKeyboard Keyboard => kb;
@@ -43,8 +44,11 @@ namespace AttackOnShadow.Device
             try
             {
                 if (kb == null) await Connect();
-                if (kb != null)
+                // poll the layer rarely, and never shortly after a change (see K85Keyboard.Settle)
+                if (kb != null && (DateTime.Now - lastPoll).TotalSeconds >= 5
+                    && !(kb is K85Keyboard k && (DateTime.Now - k.LastWrite).TotalSeconds < 4))
                 {
+                    lastPoll = DateTime.Now;
                     int l = await kb.GetLayerAsync();
                     failures = 0;
                     if (l != Layer) { Layer = l; Raise(); }
@@ -53,7 +57,7 @@ namespace AttackOnShadow.Device
             catch (Exception e)
             {
                 Log.Info("poll failed: " + e.Message);
-                if (++failures >= 2) Drop("Связь потеряна: " + e.Message);
+                if (++failures >= 2) Drop("Клавиатура перестала отвечать");
             }
             finally { busy = false; }
         }
@@ -76,7 +80,9 @@ namespace AttackOnShadow.Device
             }
             catch (Exception e)
             {
-                string why = "Ошибка USB: " + e.Message;
+                string why = e.Message.Contains("[31]")
+                    ? "Клавиатура не отвечает. Переподключи кабель K85 — программа подключится сама."
+                    : "Ошибка USB: " + e.Message;
                 if (why != lastError) { Log.Info("connect failed: " + e.Message); lastError = why; }
                 Status = why.Length > 160 ? why.Substring(0, 160) + "…" : why;
                 Raise();

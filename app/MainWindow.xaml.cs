@@ -54,7 +54,7 @@ namespace AttackOnShadow
                 SwatchPanel.Children.Add(b);
             }
 
-            lightDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+            lightDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
             lightDebounce.Tick += async (s, e) => { lightDebounce.Stop(); await PushLighting(); };
             updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
             updateTimer.Tick += async (s, e) => await MaybeCheckUpdates(false);

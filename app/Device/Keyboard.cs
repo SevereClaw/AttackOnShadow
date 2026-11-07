@@ -80,12 +80,25 @@ namespace AttackOnShadow.Device
             throw new IOException(errors.Count == 0 ? "нет подходящего интерфейса" : string.Join("; ", errors));
         }
 
+        // The K85 firmware hangs (every request then fails with error 31 until the
+        // cable is replugged) if it is queried while it rebuilds a lighting effect.
+        // After each write nothing else is sent until the keyboard has settled.
+        DateTime quietUntil = DateTime.MinValue;
+        public DateTime LastWrite { get; private set; } = DateTime.MinValue;
+
         async Task<T> Locked<T>(Func<T> io)
         {
             await gate.WaitAsync().ConfigureAwait(false);
-            try { return await Task.Run(io).ConfigureAwait(false); }
+            try
+            {
+                var wait = quietUntil - DateTime.Now;
+                if (wait > TimeSpan.Zero) await Task.Delay(wait).ConfigureAwait(false);
+                return await Task.Run(io).ConfigureAwait(false);
+            }
             finally { gate.Release(); }
         }
+
+        void Settle(int ms) { LastWrite = DateTime.Now; quietUntil = DateTime.Now.AddMilliseconds(ms); }
 
         void Write(byte[] p)
         {
@@ -109,14 +122,14 @@ namespace AttackOnShadow.Device
             return slot < 0 ? -1 : K85Protocol.LayerFromSlot(slot);
         });
 
-        public Task<bool> SetLayerAsync(int layer) => Locked(() => { Write(K85Protocol.SetLayer(layer)); Thread.Sleep(50); return true; });
+        public Task<bool> SetLayerAsync(int layer) => Locked(() => { Write(K85Protocol.SetLayer(layer)); Settle(400); return true; });
 
         public Task<Lighting> GetLightingAsync() => Locked(() => K85Protocol.ParseLedParam(Query(K85Protocol.GetLedParam())));
 
         public Task<bool> SetLightingAsync(Lighting l) => Locked(() =>
         {
             Write(K85Protocol.SetLedParam(l));
-            Thread.Sleep(500); // the stock driver waits COMMONDELAY after lighting changes
+            Settle(2000); // stock driver: COMMONDELAY 500 ms; the K85 needs more before the next request
             return true;
         });
 
