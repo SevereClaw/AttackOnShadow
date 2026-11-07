@@ -163,7 +163,7 @@ namespace AttackOnShadow.Device
 
             var l = new Lighting { Mode = 4, Speed = 3, Brightness = 4, Variant = 1, Rainbow = false, R = 0x10, G = 0x20, B = 0x30 };
             var p = SetLedParam(l);
-            Eq("SET_LEDPARAM wave", Hex(p, 9), "04 04 01 04 17 10 20 30 " + ((byte)~((4 + 4 + 1 + 4 + 0x17 + 0x10 + 0x20 + 0x30) & 0xFF)).ToString("X2"));
+            Eq("SET_LEDPARAM wave", Hex(p, 9), "04 04 01 04 17 10 20 30 " + ((byte)(~(4 + 4 + 1 + 4 + 0x17 + 0x10 + 0x20 + 0x30) & 0xFF)).ToString("X2"));
             var back = new byte[64]; Array.Copy(p, back, 64); back[0] = GET_LEDPARAM;
             var parsed = ParseLedParam(back);
             if (parsed == null || !parsed.Equals(l)) fail.Add("LEDPARAM roundtrip");
