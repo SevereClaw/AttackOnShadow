@@ -38,6 +38,11 @@ namespace AttackOnShadow
             if (args.Contains("--silent") && (args.Contains("--install") || args.Contains("--uninstall"))) { Shutdown(0); return; }
 
             instance = new SingleInstance();
+            if (!instance.IsFirst && ReplaceOlderCopies())
+            {
+                instance.Dispose();
+                instance = new SingleInstance();
+            }
             if (!instance.IsFirst) { instance.SignalFirst(); Shutdown(0); return; }
 
             Installer.CleanupOld();
@@ -83,6 +88,29 @@ namespace AttackOnShadow
             if (args.Contains("--tray")) Log.Info("started in tray");
             else ShowWindow();
             window.StartUpdateChecks();
+        }
+
+        /// <summary>Closes running copies that are older than this one (e.g. 2.0.2 sitting in the tray).</summary>
+        static bool ReplaceOlderCopies()
+        {
+            bool killed = false;
+            var me = System.Diagnostics.Process.GetCurrentProcess();
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("AttackOnShadow"))
+            {
+                try
+                {
+                    if (p.Id == me.Id) continue;
+                    string theirs = p.MainModule.FileVersionInfo.ProductVersion ?? "0";
+                    if (theirs.Contains("+")) theirs = theirs.Substring(0, theirs.IndexOf('+'));
+                    if (Updater.Compare(AppInfo.Version, theirs) > 0)
+                    {
+                        Log.Info($"closing older copy {theirs} (pid {p.Id})");
+                        p.Kill(); p.WaitForExit(3000); killed = true;
+                    }
+                }
+                catch (Exception e) { Log.Info("replace older copy: " + e.Message); }
+            }
+            return killed;
         }
 
         public void ShowWindow()

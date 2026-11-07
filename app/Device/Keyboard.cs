@@ -58,6 +58,8 @@ namespace AttackOnShadow.Device
                     try
                     {
                         dev = HidDevice.Open(info, access);
+                        try { Log.Usb($"read-only probe id={id:X2} access={access:X}: ← {K85Protocol.Hex(dev.GetFeature(id), 12)}"); }
+                        catch (Exception re) { Log.Usb($"read-only probe id={id:X2} access={access:X}: {re.Message}"); }
                         var kb = new K85Keyboard(dev, id);
                         var r = kb.Query(K85Protocol.GetProfile());
                         int slot = K85Protocol.ParseProfile(r);

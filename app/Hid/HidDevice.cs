@@ -14,10 +14,10 @@ namespace AttackOnShadow.Hid
         public string Path;
         public ushort VendorId, ProductId, Version;
         public ushort UsagePage, Usage;
-        public int FeatureReportLength;
+        public int FeatureReportLength, InputReportLength, OutputReportLength;
         public byte[] FeatureReportIds = new byte[0];   // report ids declared for feature reports (empty: none)
         public override string ToString() =>
-            $"{VendorId:X4}:{ProductId:X4} up={UsagePage:X4} u={Usage:X4} feat={FeatureReportLength} ids=[{string.Join(",", FeatureReportIds.Select(b => b.ToString("X2")))}]";
+            $"{VendorId:X4}:{ProductId:X4} up={UsagePage:X4} u={Usage:X4} in={InputReportLength} out={OutputReportLength} feat={FeatureReportLength} ids=[{string.Join(",", FeatureReportIds.Select(b => b.ToString("X2")))}]";
     }
 
     /// <summary>Minimal Win32 HID access: enumerate interfaces and exchange feature reports.</summary>
@@ -86,6 +86,8 @@ namespace AttackOnShadow.Hid
                             info.UsagePage = caps.UsagePage;
                             info.Usage = caps.Usage;
                             info.FeatureReportLength = caps.FeatureReportByteLength;
+                            info.InputReportLength = caps.InputReportByteLength;
+                            info.OutputReportLength = caps.OutputReportByteLength;
                             info.FeatureReportIds = FeatureIds(pp, caps);
                         }
                     }
