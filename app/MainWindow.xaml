@@ -198,12 +198,14 @@
                         <ColumnDefinition Width="330"/>
                     </Grid.ColumnDefinitions>
                     <Border Style="{StaticResource Card}" Margin="0,0,22,0">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource H2}" Text="Эффект"/>
-                            <WrapPanel x:Name="EffectsPanel"/>
-                            <TextBlock x:Name="VariantTitle" Style="{StaticResource H2}" Text="Вариант" Margin="0,12,0,10"/>
-                            <WrapPanel x:Name="VariantsPanel"/>
-                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="0,0,6,0">
+                                <TextBlock Style="{StaticResource H2}" Text="Эффект"/>
+                                <WrapPanel x:Name="EffectsPanel"/>
+                                <TextBlock x:Name="VariantTitle" Style="{StaticResource H2}" Text="Вариант" Margin="0,12,0,10"/>
+                                <WrapPanel x:Name="VariantsPanel"/>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Border>
                     <Border Grid.Column="1" Style="{StaticResource Card}">
                         <StackPanel>
