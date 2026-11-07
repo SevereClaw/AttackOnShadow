@@ -223,11 +223,11 @@ namespace AttackOnShadow.Device
             var pic = new byte[3 * 128]; pic[3 * 41] = 0x11; pic[3 * 89 + 2] = 0x22; // space red, right arrow blue
             var pk = SetUserPicture(pic);
             Eq("picture pages", pk.Count.ToString(), "7");
-            Eq("picture header", Hex(pk[2], 8), "0C 00 80 01 02 00 00 " + ((byte)~(0x0C + 0x80 + 1 + 2)).ToString("X2"));
+            Eq("picture header", Hex(pk[2], 8), "0C 00 80 01 02 00 00 " + ((byte)(~(0x0C + 0x80 + 1 + 2) & 0xFF)).ToString("X2"));
             Eq("picture space", pk[2][8 + 3 * 41 - 112].ToString("X2"), "11");
             Eq("picture arrow", pk[4][8 + 3 * 89 + 2 - 224].ToString("X2"), "22");
             var up = SetLedParam(new Lighting { Mode = UserPictureMode, Brightness = 4, Variant = 2 });
-            Eq("user picture mode", Hex(up, 9), "07 0D 00 04 20 00 C8 C8 " + ((byte)~(7 + 13 + 4 + 0x20 + 0xC8 + 0xC8)).ToString("X2"));
+            Eq("user picture mode", Hex(up, 9), "07 0D 00 04 20 00 C8 C8 " + ((byte)(~(7 + 13 + 4 + 0x20 + 0xC8 + 0xC8) & 0xFF)).ToString("X2"));
             var upb = new byte[64]; Array.Copy(up, upb, 64); upb[0] = GET_LEDPARAM;
             var upp = ParseLedParam(upb);
             if (upp == null || upp.Mode != UserPictureMode || upp.Variant != 2) fail.Add("user picture roundtrip");
