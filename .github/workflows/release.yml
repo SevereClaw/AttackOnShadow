@@ -53,6 +53,23 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "screenshot exit $($p.ExitCode)" }
           Get-ChildItem $dir
 
+      - name: Publish screenshots to the ci-screenshots branch
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shots'
+          $wt = Join-Path $env:RUNNER_TEMP 'shots-branch'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git worktree add --detach $wt
+          Push-Location $wt
+          git checkout --orphan ci-screenshots
+          git rm -rfq . 2>$null
+          Copy-Item "$dir/*.png" .
+          "Screenshots of ${{ github.sha }} (simulated keyboard)" | Set-Content README.md
+          git add -A
+          git commit -qm "screenshots for ${{ github.sha }}"
+          git push -f origin ci-screenshots
+          Pop-Location
+
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots
