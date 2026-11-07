@@ -74,6 +74,7 @@ namespace AttackOnShadow
         {
             if (!IsInitialized) return;
             if (sender == NavLayers) ShowPage("layers");
+            else if (sender == NavKeys) ShowPage("keys");
             else if (sender == NavLight) ShowPage("light");
             else if (sender == NavAuto) ShowPage("auto");
             else ShowPage("settings");
@@ -82,18 +83,20 @@ namespace AttackOnShadow
         public void ShowPage(string page)
         {
             PageLayers.Visibility = page == "layers" ? Visibility.Visible : Visibility.Collapsed;
+            PageKeys.Visibility = page == "keys" ? Visibility.Visible : Visibility.Collapsed;
             PageLight.Visibility = page == "light" ? Visibility.Visible : Visibility.Collapsed;
             PageAuto.Visibility = page == "auto" ? Visibility.Visible : Visibility.Collapsed;
             PageSettings.Visibility = page == "settings" ? Visibility.Visible : Visibility.Collapsed;
-            PageTitle.Text = page == "layers" ? "СЛОИ" : page == "light" ? "ПОДСВЕТКА" : page == "auto" ? "АВТОПРОФИЛИ" : "НАСТРОЙКИ";
-            var nav = page == "layers" ? NavLayers : page == "light" ? NavLight : page == "auto" ? NavAuto : NavSettings;
+            PageTitle.Text = page == "layers" ? "СЛОИ" : page == "keys" ? "КЛАВИШИ" : page == "light" ? "ПОДСВЕТКА" : page == "auto" ? "АВТОПРОФИЛИ" : "НАСТРОЙКИ";
+            var nav = page == "layers" ? NavLayers : page == "keys" ? NavKeys : page == "light" ? NavLight : page == "auto" ? NavAuto : NavSettings;
             if (nav.IsChecked != true) nav.IsChecked = true;
             if (page == "light" && !lightingLoaded) _ = LoadLighting();
+            if (page == "keys") { BuildKeys(); travelFailed = false; _ = LoadKeys(); }
             if (page == "auto") RefreshProcesses();
             if (page == "settings") RefreshConflict();
 
             // P3R-style slide-in
-            var target = (FrameworkElement)(page == "layers" ? PageLayers : page == "light" ? PageLight : page == "auto" ? (FrameworkElement)PageAuto : PageSettings);
+            var target = (FrameworkElement)(page == "layers" ? PageLayers : page == "keys" ? (FrameworkElement)PageKeys : page == "light" ? PageLight : page == "auto" ? (FrameworkElement)PageAuto : PageSettings);
             var tt = new TranslateTransform(-30, 0);
             target.RenderTransform = tt;
             tt.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(-30, 0, TimeSpan.FromMilliseconds(180)) { EasingFunction = new CubicEase() });
@@ -115,6 +118,7 @@ namespace AttackOnShadow
             if (!d.Connected) lightingLoaded = false;
             else if (!lightingLoaded && PageLight.Visibility == Visibility.Visible) _ = LoadLighting();
             LightStatus.Text = d.Connected ? LightStatus.Text : "Клавиатура не подключена";
+            KeysOnDevice();
         }
 
         async void Layer_Click(object sender, RoutedEventArgs e)

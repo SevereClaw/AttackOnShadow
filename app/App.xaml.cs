@@ -134,6 +134,7 @@ namespace AttackOnShadow
         void RunSelfTest(string outFile)
         {
             var fails = K85Protocol.SelfTest();
+            try { K85Travel.SelfTest(fails); } catch (Exception x) { fails.Add("travel selftest crashed: " + x); }
             string report = fails.Count == 0 ? "selftest OK" : "selftest FAILED\n" + string.Join("\n", fails);
             if (outFile != null) File.WriteAllText(outFile, report);
             Shutdown(fails.Count == 0 ? 0 : 1);
@@ -155,10 +156,11 @@ namespace AttackOnShadow
                 window.Show();
                 Device.Start();
                 await Task.Delay(1500);
-                foreach (var page in new[] { "layers", "light", "auto", "settings" })
+                foreach (var page in new[] { "layers", "keys", "light", "auto", "settings" })
                 {
                     window.ShowPage(page);
                     await Task.Delay(700);
+                    if (page == "keys") { window.SelectWasd(); await Task.Delay(300); }
                     window.UpdateLayout();
                     var bmp = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                     bmp.Render((Visual)window.Content);

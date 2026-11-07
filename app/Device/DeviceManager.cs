@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using AttackOnShadow.Services;
@@ -28,6 +29,9 @@ namespace AttackOnShadow.Device
 
         public event Action Changed;
 
+        /// <summary>While set (calibration), the background layer poll is paused.</summary>
+        public bool PausePolling { get; set; }
+
         public DeviceManager(Dispatcher dispatcher, bool demoMode)
         {
             ui = dispatcher;
@@ -45,7 +49,7 @@ namespace AttackOnShadow.Device
             {
                 if (kb == null) await Connect();
                 // poll the layer rarely, and never shortly after a change (see K85Keyboard.Settle)
-                if (kb != null && (DateTime.Now - lastPoll).TotalSeconds >= 5
+                if (kb != null && !PausePolling && (DateTime.Now - lastPoll).TotalSeconds >= 5
                     && !(kb is K85Keyboard k && (DateTime.Now - k.LastWrite).TotalSeconds < 4))
                 {
                     lastPoll = DateTime.Now;
@@ -125,6 +129,17 @@ namespace AttackOnShadow.Device
             try { return await kb.SetLightingAsync(l); }
             catch (Exception e) { Log.Info("set lighting failed: " + e.Message); Drop("Связь потеряна: " + e.Message); return false; }
         }
+
+        /// <summary>Runs a keyboard call; on a USB error the connection is dropped and the fallback returned.</summary>
+        public async Task<T> Run<T>(string what, Func<IKeyboard, Task<T>> call, T fallback = default(T))
+        {
+            if (kb == null) return fallback;
+            try { return await call(kb); }
+            catch (InvalidDataException e) { Log.Info(what + ": " + e.Message); LastError = e.Message; return fallback; }
+            catch (Exception e) { Log.Info(what + " failed: " + e.Message); LastError = e.Message; Drop("Связь потеряна: " + e.Message); return fallback; }
+        }
+
+        public string LastError { get; private set; }
 
         void Raise() { if (ui.CheckAccess()) Changed?.Invoke(); else ui.BeginInvoke(new Action(() => Changed?.Invoke())); }
     }

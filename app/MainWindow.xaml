@@ -55,6 +55,7 @@
 
                 <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="-8,0,0,0" WindowChrome.IsHitTestVisibleInChrome="True">
                     <RadioButton x:Name="NavLayers" Style="{StaticResource NavItem}" Content="СЛОИ" IsChecked="True" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavKeys" Style="{StaticResource NavItem}" Content="КЛАВИШИ" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavLight" Style="{StaticResource NavItem}" Content="ПОДСВЕТКА" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavAuto" Style="{StaticResource NavItem}" Content="АВТОПРОФИЛИ" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" Content="НАСТРОЙКИ" Checked="Nav_Checked"/>
@@ -94,6 +95,99 @@
                         <TextBlock x:Name="LayersAutoNote" Style="{StaticResource Hint}" Margin="0,34,0,0"/>
                     </StackPanel>
                 </Grid>
+
+                <!-- Keys: travel, Rapid Trigger, polling rate, debounce, calibration -->
+                <ScrollViewer x:Name="PageKeys" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,6,0">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,18" Padding="18,14,18,16">
+                            <StackPanel>
+                                <DockPanel>
+                                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                        <Button Style="{StaticResource Plate}" Content="Все" Click="KeysAll_Click"/>
+                                        <Button Style="{StaticResource Plate}" Content="WASD" Click="KeysWasd_Click"/>
+                                        <Button Style="{StaticResource Plate}" Content="Снять" Click="KeysNone_Click" Margin="0"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="KeysHint" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,14,0"
+                                               Text="Щелчок — одна клавиша, Ctrl или протяжка — несколько. На клавишах — точка срабатывания в мм."/>
+                                </DockPanel>
+                                <Viewbox Stretch="Uniform" Margin="0,12,0,0" MaxHeight="250" HorizontalAlignment="Left">
+                                    <Canvas x:Name="KeyCanvas" Background="Transparent"
+                                            MouseLeftButtonDown="KeyCanvas_Down" MouseMove="KeyCanvas_Move" MouseLeftButtonUp="KeyCanvas_Up"/>
+                                </Viewbox>
+                            </StackPanel>
+                        </Border>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="TravelCard" Style="{StaticResource Card}" Margin="0,0,22,0">
+                                <StackPanel>
+                                    <TextBlock x:Name="TravelTitle" Style="{StaticResource H2}" Text="Ход клавиш"/>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="ActValue" DockPanel.Dock="Right" FontSize="17" FontWeight="SemiBold" FontStyle="Italic" Foreground="{StaticResource Cyan}" Text="—"/>
+                                    <TextBlock Text="Точка срабатывания" FontSize="15.5" Foreground="White"/>
+                                </DockPanel>
+                                <Slider x:Name="ActSlider" Minimum="0.1" Maximum="4" TickFrequency="0.1" ValueChanged="TravelSlider_Changed"/>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="RelValue" DockPanel.Dock="Right" FontSize="17" FontWeight="SemiBold" FontStyle="Italic" Foreground="{StaticResource Cyan}" Text="—"/>
+                                    <TextBlock Text="Точка отпускания" FontSize="15.5" Foreground="White"/>
+                                </DockPanel>
+                                <Slider x:Name="RelSlider" Minimum="0.1" Maximum="4" TickFrequency="0.1" ValueChanged="TravelSlider_Changed"/>
+                                <CheckBox x:Name="RapidBox" Content="Rapid Trigger" Margin="0,14,0,0" Checked="Travel_Changed" Unchecked="Travel_Changed"/>
+                                <StackPanel x:Name="RapidPanel">
+                                    <TextBlock Style="{StaticResource Hint}" Margin="0,-4,0,2" Text="Клавиша срабатывает и отпускается по движению вверх-вниз, а не по фиксированной точке."/>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="RtPressValue" DockPanel.Dock="Right" FontSize="17" FontWeight="SemiBold" FontStyle="Italic" Foreground="{StaticResource Cyan}" Text="—"/>
+                                    <TextBlock Text="Сработать после нажатия на" FontSize="15.5" Foreground="White"/>
+                                </DockPanel>
+                                <Slider x:Name="RtPressSlider" Minimum="0.2" Maximum="2.5" TickFrequency="0.1" ValueChanged="TravelSlider_Changed"/>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="RtReleaseValue" DockPanel.Dock="Right" FontSize="17" FontWeight="SemiBold" FontStyle="Italic" Foreground="{StaticResource Cyan}" Text="—"/>
+                                    <TextBlock Text="Отпустить после подъёма на" FontSize="15.5" Foreground="White"/>
+                                </DockPanel>
+                                <Slider x:Name="RtReleaseSlider" Minimum="0.2" Maximum="2.5" TickFrequency="0.1" ValueChanged="TravelSlider_Changed"/>
+                                </StackPanel>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBlock x:Name="DeadValue" DockPanel.Dock="Right" FontSize="17" FontWeight="SemiBold" FontStyle="Italic" Foreground="{StaticResource Cyan}" Text="—"/>
+                                    <TextBlock Text="Нижняя мёртвая зона (от верха)" FontSize="15.5" Foreground="White"/>
+                                </DockPanel>
+                                <Slider x:Name="DeadSlider" Minimum="0" Maximum="4" TickFrequency="0.1" ValueChanged="TravelSlider_Changed"/>
+                                <TextBlock x:Name="TravelStatus" Style="{StaticResource Hint}" Margin="0,12,0,10"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="TravelApply" Style="{StaticResource Plate}" Content="Сохранить в клавиатуру" Click="TravelApply_Click"/>
+                                    <Button x:Name="TravelRevert" Style="{StaticResource Plate}" Content="Отменить" Click="TravelRevert_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,18">
+                                    <StackPanel>
+                                        <TextBlock x:Name="RateTitle" Style="{StaticResource H2}" Text="Частота опроса"/>
+                                        <WrapPanel x:Name="RatePanel"/>
+                                        <DockPanel Margin="0,14,0,0">
+                                            <TextBlock x:Name="DebounceValue" DockPanel.Dock="Right" FontSize="17" FontWeight="SemiBold" FontStyle="Italic" Foreground="{StaticResource Cyan}" Text="—"/>
+                                            <TextBlock Style="{StaticResource H2}" Text="Антидребезг" Margin="0"/>
+                                        </DockPanel>
+                                        <Slider x:Name="DebounceSlider" Minimum="0" Maximum="10" ValueChanged="Debounce_Changed" PreviewMouseLeftButtonUp="Debounce_Commit" KeyUp="Debounce_KeyUp"/>
+                                        <TextBlock x:Name="PerfStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource H2}" Text="Калибровка"/>
+                                        <TextBlock x:Name="CalText" Style="{StaticResource Hint}" Margin="0,0,0,12"
+                                                   Text="Нужна после замены свичей, обновления прошивки или если клавиши срабатывают странно."/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button x:Name="CalButton" Style="{StaticResource Plate}" Content="Начать" Click="Calibrate_Click"/>
+                                            <Button x:Name="CalCancel" Style="{StaticResource Plate}" Content="Прервать" Click="CalibrateCancel_Click" Visibility="Collapsed"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <!-- Lighting -->
                 <Grid x:Name="PageLight" Grid.Row="1" Visibility="Collapsed">

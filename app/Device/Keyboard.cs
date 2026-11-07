@@ -16,6 +16,21 @@ namespace AttackOnShadow.Device
         Task<bool> SetLayerAsync(int layer);
         Task<Lighting> GetLightingAsync();
         Task<bool> SetLightingAsync(Lighting l);
+        Task<Performance> GetPerformanceAsync();
+        Task<bool> SetReportRateAsync(int hz);
+        Task<bool> SetDebounceAsync(int ms);
+        Task<TravelMap> GetTravelAsync();
+        Task<bool> SetTravelAsync(TravelMap before, TravelMap after);
+        Task CalibrationStartAsync();             // zero point (2 s, hands off), then max-travel mode on
+        Task CalibrationFinishAsync();            // max-travel mode off
+        Task<double[]> GetCalibrationAsync();     // per matrix index 0..1, null if unavailable
+    }
+
+    public sealed class Performance
+    {
+        public int Slot = -1;       // onboard profile slot the values belong to
+        public int RateHz = -1;     // 125/250/500/1000, -1 unknown
+        public int DebounceMs = -1;
     }
 
     /// <summary>The real keyboard over USB HID feature reports.</summary>
@@ -133,6 +148,102 @@ namespace AttackOnShadow.Device
             return true;
         });
 
+        int CurrentSlot()
+        {
+            int slot = K85Protocol.ParseProfile(Query(K85Protocol.GetProfile()));
+            return slot < 0 ? 0 : slot;
+        }
+
+        public Task<Performance> GetPerformanceAsync() => Locked(() =>
+        {
+            var p = new Performance { Slot = CurrentSlot() };
+            p.RateHz = K85Travel.ParseReportRate(Query(K85Travel.GetReportRate(p.Slot)));
+            p.DebounceMs = K85Travel.ParseDebounce(Query(K85Travel.GetDebounce()));
+            return p;
+        });
+
+        public Task<bool> SetReportRateAsync(int hz) => Locked(() =>
+        {
+            // per onboard profile, like the stock driver: the layer that is active now
+            Write(K85Travel.SetReportRate(CurrentSlot(), hz));
+            Settle(1000);
+            return true;
+        });
+
+        public Task<bool> SetDebounceAsync(int ms) => Locked(() => { Write(K85Travel.SetDebounce(ms)); Settle(1000); return true; });
+
+        public Task<TravelMap> GetTravelAsync() => Locked(() =>
+        {
+            var m = new TravelMap();
+            var km = Query(K85Travel.GetKeyboardMode());
+            if (km.Length > 3 && km[0] == K85Travel.GET_KEY_MAG_MODE && km[1] <= 3)
+            {
+                m.KeyboardMode = km[1]; m.ModeFlag1 = km[2]; m.ModeFlag2 = km[3];
+            }
+            foreach (int param in K85Travel.Params)
+            {
+                var arr = m.Array(param);
+                for (int page = 0; page < K85Travel.ReadPages; page++)
+                {
+                    var r = Query(K85Travel.GetArray(param, page));
+                    Log.Usb($"   param {param} page {page}: {K85Protocol.Hex(r, 64)}");
+                    string bad = K85Travel.CheckPage(param, r);
+                    if (bad != null) throw new InvalidDataException("непонятный ответ клавиатуры (" + bad + ")");
+                    Array.Copy(r, 0, arr, page * K85Travel.ReadPageSize, K85Travel.ReadPageSize);
+                }
+            }
+            string why = K85Travel.Validate(m);
+            if (why != null) throw new InvalidDataException("непонятные значения хода: " + why);
+            return m;
+        });
+
+        public Task<bool> SetTravelAsync(TravelMap before, TravelMap after) => Locked(() =>
+        {
+            var packets = K85Travel.Diff(before, after);
+            if (packets.Count == 0) return true;
+            if (after.KeyboardMode != 3)
+            {
+                // preset modes (comfort / gaming…) ignore per-key values
+                Write(K85Travel.SetKeyboardMode(3, after.ModeFlag1, after.ModeFlag2));
+                Thread.Sleep(300);
+                after.KeyboardMode = 3;
+            }
+            foreach (var p in packets) { Write(p); Thread.Sleep(15); }
+            Settle(1500);
+            return true;
+        });
+
+        public Task CalibrationStartAsync() => Locked(() =>
+        {
+            Write(K85Travel.Calibrate(true));
+            Thread.Sleep(2000);           // the keyboard measures the released position
+            Write(K85Travel.Calibrate(false));
+            Thread.Sleep(500);
+            Write(K85Travel.CalibrateMax(true));
+            Settle(300);
+            return true;
+        });
+
+        public Task CalibrationFinishAsync() => Locked(() => { Write(K85Travel.CalibrateMax(false)); Settle(1500); return true; });
+
+        public Task<double[]> GetCalibrationAsync() => Locked(() =>
+        {
+            var max = new List<short>(); var cal = new List<short>();
+            for (int page = 0; page < 4; page++)
+            {
+                var r = Query(K85Travel.GetCalMax(page));
+                if (r.Length < 64) return null;
+                max.AddRange(K85Travel.ParseInt16Page(r));
+            }
+            for (int page = 0; page < 4; page++)
+            {
+                var r = Query(K85Travel.GetCal(page));
+                if (r.Length < 64) return null;
+                cal.AddRange(K85Travel.ParseInt16Page(r));
+            }
+            return K85Travel.CalProgress(max.ToArray(), cal.ToArray());
+        });
+
         public void Dispose() { dev.Dispose(); gate.Dispose(); }
     }
 
@@ -146,6 +257,24 @@ namespace AttackOnShadow.Device
         public Task<bool> SetLayerAsync(int l) { layer = l; return Task.FromResult(true); }
         public Task<Lighting> GetLightingAsync() => Task.FromResult(light.Clone());
         public Task<bool> SetLightingAsync(Lighting l) { light = l.Clone(); return Task.FromResult(true); }
+        Performance perf = new Performance { Slot = 0, RateHz = 1000, DebounceMs = 1 };
+        TravelMap travel = K85Travel.Demo();
+        DateTime calStart;
+        public Task<Performance> GetPerformanceAsync() => Task.FromResult(new Performance { Slot = layer * 4, RateHz = perf.RateHz, DebounceMs = perf.DebounceMs });
+        public Task<bool> SetReportRateAsync(int hz) { perf.RateHz = hz; return Task.FromResult(true); }
+        public Task<bool> SetDebounceAsync(int ms) { perf.DebounceMs = ms; return Task.FromResult(true); }
+        public Task<TravelMap> GetTravelAsync() => Task.FromResult(travel.Clone());
+        public Task<bool> SetTravelAsync(TravelMap before, TravelMap after) { travel = after.Clone(); travel.KeyboardMode = 3; return Task.FromResult(true); }
+        public async Task CalibrationStartAsync() { await Task.Delay(1500); calStart = DateTime.Now; }
+        public Task CalibrationFinishAsync() => Task.CompletedTask;
+        public Task<double[]> GetCalibrationAsync()
+        {
+            // keys "get pressed" one after another, left to right
+            double t = (DateTime.Now - calStart).TotalSeconds;
+            var r = new double[TravelMap.Size];
+            foreach (var k in K85Travel.Layout) r[k.Matrix] = Math.Max(0, Math.Min(1, t * 2 - k.X));
+            return Task.FromResult(r);
+        }
         public void Dispose() { }
     }
 }
