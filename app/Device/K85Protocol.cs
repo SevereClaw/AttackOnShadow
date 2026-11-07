@@ -35,8 +35,10 @@ namespace AttackOnShadow.Device
         public const int LayerCount = 2;      // user-visible layers
         public const int SlotsPerLayer = 4;   // onboard profile slots per layer on hall keyboards
 
-        public const byte SET_PROFILE = 0x02, GET_PROFILE = 0x82;
-        public const byte SET_LEDPARAM = 0x04, GET_LEDPARAM = 0x84;
+        // Command numbers of the K85's protocol class (class NA in the stock driver
+        // overrides the base table: 0x02/0x04 there mean RESET and REPORT RATE).
+        public const byte SET_PROFILE = 0x05, GET_PROFILE = 0x85;
+        public const byte SET_LEDPARAM = 0x07, GET_LEDPARAM = 0x87;
         public const byte GET_REV = 0x80;
 
         const int Normal = 7, Dazzle = 8, MaxSpeed = 4;
@@ -156,14 +158,16 @@ namespace AttackOnShadow.Device
             void Eq(string what, string got, string want) { if (got != want) fail.Add($"{what}: {got} != {want}"); }
 
             // checksums: vendor formula, cross-checked with debloatedfl-driver's tests
-            Eq("GET_PROFILE", Hex(GetProfile(), 8), "82 00 00 00 00 00 00 7D");
-            Eq("GET_LEDPARAM", Hex(GetLedParam(), 8), "84 00 00 00 00 00 00 7B");
-            Eq("SET_PROFILE layer 2", Hex(SetLayer(1), 8), "02 04 00 00 00 00 00 F9");
-            Eq("SET_PROFILE layer 1", Hex(SetLayer(0), 8), "02 00 00 00 00 00 00 FD");
+            Eq("GET_PROFILE", Hex(GetProfile(), 8), "85 00 00 00 00 00 00 7A");
+            Eq("GET_LEDPARAM", Hex(GetLedParam(), 8), "87 00 00 00 00 00 00 78"); // same bytes as debloatedfl-driver
+            Eq("SET_PROFILE layer 2", Hex(SetLayer(1), 8), "05 04 00 00 00 00 00 F6");
+            Eq("SET_PROFILE layer 1", Hex(SetLayer(0), 8), "05 00 00 00 00 00 00 FA");
+            // the two commands that must never be sent by mistake
+            if (SetLayer(0)[0] == 0x02 || SetLedParam(new Lighting())[0] == 0x04) fail.Add("RESET/REPORT command number used");
 
             var l = new Lighting { Mode = 4, Speed = 3, Brightness = 4, Variant = 1, Rainbow = false, R = 0x10, G = 0x20, B = 0x30 };
             var p = SetLedParam(l);
-            Eq("SET_LEDPARAM wave", Hex(p, 9), "04 04 01 04 17 10 20 30 " + ((byte)(~(4 + 4 + 1 + 4 + 0x17 + 0x10 + 0x20 + 0x30) & 0xFF)).ToString("X2"));
+            Eq("SET_LEDPARAM wave", Hex(p, 9), "07 04 01 04 17 10 20 30 " + ((byte)(~(7 + 4 + 1 + 4 + 0x17 + 0x10 + 0x20 + 0x30) & 0xFF)).ToString("X2"));
             var back = new byte[64]; Array.Copy(p, back, 64); back[0] = GET_LEDPARAM;
             var parsed = ParseLedParam(back);
             if (parsed == null || !parsed.Equals(l)) fail.Add("LEDPARAM roundtrip");
@@ -178,7 +182,7 @@ namespace AttackOnShadow.Device
             var pp = ParseLedParam(preset);
             if (pp == null || pp.R != 255 || pp.G != 255 || pp.B != 0) fail.Add("preset colour");
 
-            Eq("ParseProfile", ParseProfile(new byte[] { 0x82, 4 }).ToString(), "4");
+            Eq("ParseProfile", ParseProfile(new byte[] { 0x85, 4 }).ToString(), "4");
             Eq("LayerFromSlot", LayerFromSlot(5).ToString(), "1");
             return fail;
         }
