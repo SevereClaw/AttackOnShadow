@@ -40,6 +40,11 @@ namespace AttackOnShadow.Device
         public const byte SET_PROFILE = 0x05, GET_PROFILE = 0x85;
         public const byte SET_LEDPARAM = 0x07, GET_LEDPARAM = 0x87;
         public const byte GET_REV = 0x80;
+        public const byte SET_USERPIC = 0x0C;
+        public const int UserPictureMode = 13;    // "LightUserPicture": shows the picture stored in slot (variant)
+        public const int PictureSlots = 5;
+        public const int PicturePages = 7;        // 7 x 56 bytes = RGB for matrix indices 0..130
+        const int PictureLength = 384;            // stock driver: 64 * floor(512 / 4 * 3 / 64)
 
         const int Normal = 7, Dazzle = 8, MaxSpeed = 4;
         static readonly int[] PresetColors = { 0xFF0000, 0xFF8000, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0xFF00FF };
@@ -59,6 +64,8 @@ namespace AttackOnShadow.Device
             new Effect { Code = 10, Name = "Синусоида" },
             new Effect { Code = 11, Name = "Калейдоскоп", Variants = new[] { (0, "Наружу"), (1, "Внутрь") } },
             new Effect { Code = 12, Name = "Бегущая линия", Variants = new[] { (0, "Вправо"), (1, "Влево") } },
+            new Effect { Code = UserPictureMode, Name = "Своя картинка", HasSpeed = false, HasColor = false,
+                         Variants = new[] { (0, "Слот 1"), (1, "Слот 2"), (2, "Слот 3"), (3, "Слот 4"), (4, "Слот 5") } },
             new Effect { Code = 14, Name = "Лазер" },
             new Effect { Code = 15, Name = "Круговая волна", Variants = new[] { (0, "Против часовой"), (1, "По часовой") } },
             new Effect { Code = 16, Name = "Мерцание" },
@@ -109,6 +116,15 @@ namespace AttackOnShadow.Device
             int low = l.Rainbow ? Dazzle : Normal;
             int variant = eff != null && eff.Variants.Length > 0 ? l.Variant : 0;
             p[1] = (byte)l.Mode;
+            if (l.Mode == UserPictureMode)
+            {
+                // the stock driver sends: no speed, slot in the high nibble, colour 00 C8 C8
+                p[3] = (byte)Clamp(l.Brightness, 0, 4);
+                p[4] = (byte)(Clamp(l.Variant, 0, PictureSlots - 1) << 4);
+                p[6] = 0xC8; p[7] = 0xC8;
+                Checksum(p, 8);
+                return p;
+            }
             p[2] = (byte)(MaxSpeed - Clamp(l.Speed, 0, MaxSpeed));
             p[3] = (byte)Clamp(l.Brightness, 0, 4);
             p[4] = (byte)((variant << 4) | low);
@@ -147,6 +163,28 @@ namespace AttackOnShadow.Device
             return l;
         }
 
+        /// <summary>
+        /// The packets that store a per-key picture into the slot that is shown now.
+        /// rgb holds 3 bytes per matrix index.
+        /// </summary>
+        public static List<byte[]> SetUserPicture(byte[] rgb)
+        {
+            var list = new List<byte[]>();
+            for (int page = 0; page < PicturePages; page++)
+            {
+                var p = Packet(SET_USERPIC);
+                p[2] = PictureLength & 0xFF; p[3] = PictureLength >> 8; p[4] = (byte)page;
+                Checksum(p, 7);
+                for (int i = 0; i < 56; i++)
+                {
+                    int k = page * 56 + i;
+                    if (k < rgb.Length) p[8 + i] = rgb[k];
+                }
+                list.Add(p);
+            }
+            return list;
+        }
+
         static int Clamp(int v, int lo, int hi) => v < lo ? lo : v > hi ? hi : v;
 
         public static string Hex(byte[] p, int n = 10) => string.Join(" ", p.Take(n).Select(b => b.ToString("X2")));
@@ -181,6 +219,18 @@ namespace AttackOnShadow.Device
             var preset = new byte[64]; preset[0] = GET_LEDPARAM; preset[1] = 1; preset[4] = 2; // preset colour #2 = yellow
             var pp = ParseLedParam(preset);
             if (pp == null || pp.R != 255 || pp.G != 255 || pp.B != 0) fail.Add("preset colour");
+
+            var pic = new byte[3 * 128]; pic[3 * 41] = 0x11; pic[3 * 89 + 2] = 0x22; // space red, right arrow blue
+            var pk = SetUserPicture(pic);
+            Eq("picture pages", pk.Count.ToString(), "7");
+            Eq("picture header", Hex(pk[2], 8), "0C 00 80 01 02 00 00 " + ((byte)~(0x0C + 0x80 + 1 + 2)).ToString("X2"));
+            Eq("picture space", pk[2][8 + 3 * 41 - 112].ToString("X2"), "11");
+            Eq("picture arrow", pk[4][8 + 3 * 89 + 2 - 224].ToString("X2"), "22");
+            var up = SetLedParam(new Lighting { Mode = UserPictureMode, Brightness = 4, Variant = 2 });
+            Eq("user picture mode", Hex(up, 9), "07 0D 00 04 20 00 C8 C8 " + ((byte)~(7 + 13 + 4 + 0x20 + 0xC8 + 0xC8)).ToString("X2"));
+            var upb = new byte[64]; Array.Copy(up, upb, 64); upb[0] = GET_LEDPARAM;
+            var upp = ParseLedParam(upb);
+            if (upp == null || upp.Mode != UserPictureMode || upp.Variant != 2) fail.Add("user picture roundtrip");
 
             Eq("ParseProfile", ParseProfile(new byte[] { 0x85, 4 }).ToString(), "4");
             Eq("LayerFromSlot", LayerFromSlot(5).ToString(), "1");

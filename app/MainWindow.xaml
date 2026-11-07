@@ -1,6 +1,7 @@
 <Window x:Class="AttackOnShadow.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:AttackOnShadow.Ui"
         Title="AttackOnShadow" Width="1180" Height="720" MinWidth="1000" MinHeight="640"
         WindowStyle="None" ResizeMode="CanResize" WindowStartupLocation="CenterScreen"
         Background="{StaticResource Navy0}" UseLayoutRounding="True"
@@ -57,6 +58,7 @@
                     <RadioButton x:Name="NavLayers" Style="{StaticResource NavItem}" Content="СЛОИ" IsChecked="True" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavKeys" Style="{StaticResource NavItem}" Content="КЛАВИШИ" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavLight" Style="{StaticResource NavItem}" Content="ПОДСВЕТКА" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavPics" Style="{StaticResource NavItem}" Content="КАРТИНКИ" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavAuto" Style="{StaticResource NavItem}" Content="АВТОПРОФИЛИ" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" Content="НАСТРОЙКИ" Checked="Nav_Checked"/>
                 </StackPanel>
@@ -220,6 +222,66 @@
                         </StackPanel>
                     </Border>
                 </Grid>
+
+                <!-- Pictures: custom picture slots and the experimental GIF-on-press mode -->
+                <ScrollViewer x:Name="PagePics" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,6,0">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,18">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="250"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,20,0">
+                                    <TextBlock Style="{StaticResource H2}" Text="Картинка на клавишах"/>
+                                    <ui:KeyboardView x:Name="PicPreview" MaxHeight="190" HorizontalAlignment="Left"/>
+                                    <DockPanel x:Name="PicFramePanel" Margin="0,10,0,0" Visibility="Collapsed">
+                                        <TextBlock x:Name="PicFrameText" DockPanel.Dock="Right" FontSize="15" Foreground="{StaticResource Cyan}" Margin="12,4,0,0" Width="70"/>
+                                        <Slider x:Name="PicFrameSlider" Minimum="0" Maximum="1" ValueChanged="PicFrame_Changed"/>
+                                    </DockPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,12"
+                                               Text="PNG, JPG или кадр из GIF. Картинка растягивается на всю клавиатуру и хранится в самой K85 — работает и без программы."/>
+                                    <Button Style="{StaticResource Plate}" Content="Выбрать файл…" HorizontalAlignment="Left" Click="PicOpen_Click"/>
+                                    <TextBlock x:Name="PicFileText" Style="{StaticResource Hint}" Margin="0,8,0,14" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                    <TextBlock Text="Слот" FontSize="15.5" Foreground="White" Margin="0,0,0,6"/>
+                                    <WrapPanel x:Name="PicSlots"/>
+                                    <Button x:Name="PicWrite" Style="{StaticResource Plate}" Content="Записать и показать" HorizontalAlignment="Left" Margin="0,6,0,0" Click="PicWrite_Click"/>
+                                    <TextBlock x:Name="PicStatus" Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" BorderBrush="{StaticResource Danger}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="250"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,20,0">
+                                    <TextBlock Style="{StaticResource H2}" Text="GIF при нажатии · эксперимент"/>
+                                    <ui:KeyboardView x:Name="GifPreview" MaxHeight="190" HorizontalAlignment="Left"/>
+                                    <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                               Text="Щёлкни клавишу на схеме, чтобы дать ей свою GIF. Точка — у клавиши своя GIF, у остальных — анимация по умолчанию."/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,10"
+                                               Text="У K85 нет команды «показать кадр», поэтому каждый кадр записывается в слот 5 своей картинки — до 8 раз в секунду, пока идёт анимация. Как это скажется на памяти клавиатуры, неизвестно. Если K85 перестанет отвечать дважды, режим выключится сам."/>
+                                    <CheckBox x:Name="GifEnabledBox" Content="Включить" Checked="GifEnabled_Changed" Unchecked="GifEnabled_Changed"/>
+                                    <TextBlock x:Name="GifStatus" Style="{StaticResource Hint}" Margin="0,0,0,12"/>
+                                    <TextBlock x:Name="GifKeyTitle" Text="По умолчанию" FontSize="16" FontWeight="SemiBold" Foreground="White"/>
+                                    <TextBlock x:Name="GifKeyFile" Style="{StaticResource Hint}" Margin="0,2,0,8" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                                    <WrapPanel>
+                                        <Button Style="{StaticResource Plate}" Content="GIF…" Click="GifAssign_Click" Margin="0,0,10,8"/>
+                                        <Button x:Name="GifClear" Style="{StaticResource Plate}" Content="Сбросить" Click="GifClear_Click" Margin="0,0,10,8"/>
+                                        <Button Style="{StaticResource Plate}" Content="Показать" Click="GifShow_Click" Margin="0,0,0,8"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <!-- Auto profiles -->
                 <Grid x:Name="PageAuto" Grid.Row="1" Visibility="Collapsed">

@@ -19,6 +19,7 @@ namespace AttackOnShadow
         public AppSettings Settings { get; private set; }
         public DeviceManager Device { get; private set; }
         public AutoProfiles Auto { get; private set; }
+        public ReactiveLights Reactive { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -77,6 +78,7 @@ namespace AttackOnShadow
 
             Device = new DeviceManager(Dispatcher, args.Contains("--demo"));
             Auto = new AutoProfiles(Settings, Device, Dispatcher);
+            Reactive = new ReactiveLights(Settings, Device, Dispatcher);
             window = new MainWindow(this);
             tray = new Tray(this);
             Auto.Switched += msg => { window.ShowToast(msg); tray.Balloon(msg); };
@@ -123,8 +125,15 @@ namespace AttackOnShadow
 
         public bool WindowVisible => window != null && window.IsVisible;
 
-        public void Quit()
+        bool quitting;
+
+        public async void Quit()
         {
+            if (quitting) return;
+            quitting = true;
+            // give the keyboard its normal lighting back (at most 3 s)
+            if (Reactive != null && Reactive.Active)
+                try { await Task.WhenAny(Reactive.StopAsync(true), Task.Delay(3000)); } catch { }
             tray?.Dispose();
             instance?.Dispose();
             Shutdown(0);
@@ -135,6 +144,15 @@ namespace AttackOnShadow
         {
             var fails = K85Protocol.SelfTest();
             try { K85Travel.SelfTest(fails); } catch (Exception x) { fails.Add("travel selftest crashed: " + x); }
+            try
+            {
+                KeyImage.SelfTest(fails);
+                if (ReactiveLights.VkToMatrix.Count < 80) fail("vk map " + ReactiveLights.VkToMatrix.Count);
+                if (ReactiveLights.VkToMatrix[0x41] != K85Travel.Layout.First(k => k.Label == "A").Matrix) fail("vk A");
+                if (ReactiveLights.VkToMatrix[0xA1] != 76) fail("vk right shift");
+            }
+            catch (Exception x) { fails.Add("picture selftest crashed: " + x); }
+            void fail(string s) => fails.Add(s);
             string report = fails.Count == 0 ? "selftest OK" : "selftest FAILED\n" + string.Join("\n", fails);
             if (outFile != null) File.WriteAllText(outFile, report);
             Shutdown(fails.Count == 0 ? 0 : 1);
@@ -152,15 +170,17 @@ namespace AttackOnShadow
                 Settings.FallbackLayer = 0;
                 Device = new DeviceManager(Dispatcher, true);
                 Auto = new AutoProfiles(Settings, Device, Dispatcher);
+                Reactive = new ReactiveLights(Settings, Device, Dispatcher);
                 window = new MainWindow(this) { Left = 0, Top = 0, ShowActivated = false };
                 window.Show();
                 Device.Start();
                 await Task.Delay(1500);
-                foreach (var page in new[] { "layers", "keys", "light", "auto", "settings" })
+                foreach (var page in new[] { "layers", "keys", "light", "pics", "auto", "settings" })
                 {
                     window.ShowPage(page);
                     await Task.Delay(700);
                     if (page == "keys") { window.SelectWasd(); await Task.Delay(300); }
+                    if (page == "pics") { window.DemoPictures(); await Task.Delay(300); }
                     window.UpdateLayout();
                     var bmp = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                     bmp.Render((Visual)window.Content);

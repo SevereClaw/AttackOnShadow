@@ -15,6 +15,7 @@ namespace AttackOnShadow.Services
         public static string SettingsFile => Path.Combine(Data, "settings.json");
         public static string LogFile => Path.Combine(Data, "log.txt");
         public static string UsbLogFile => Path.Combine(Data, "usb.txt");
+        public static string Gifs => Path.Combine(Data, "gifs");
         public static string Exe => System.Reflection.Assembly.GetExecutingAssembly().Location;
     }
 
@@ -49,6 +50,14 @@ namespace AttackOnShadow.Services
         [DataMember(Order = 2)] public int Layer;
     }
 
+    /// <summary>A GIF that plays on the keyboard when this key is pressed.</summary>
+    [DataContract]
+    public sealed class KeyGif
+    {
+        [DataMember(Order = 1)] public int Matrix;     // key matrix index (K85Travel.Layout)
+        [DataMember(Order = 2)] public string File;    // copy kept in %APPDATA%\AttackOnShadow\gifs
+    }
+
     [DataContract]
     public sealed class AppSettings
     {
@@ -62,11 +71,15 @@ namespace AttackOnShadow.Services
         [DataMember] public DateTime LastUpdateCheck;
         [DataMember] public bool UsbLog = true;
         [DataMember] public bool ImportedFromMod;
+        [DataMember] public bool ReactiveEnabled;          // experimental: GIF on key press
+        [DataMember] public List<KeyGif> KeyGifs = new List<KeyGif>();
+        [DataMember] public string DefaultGif;             // null: built-in ripple
 
         [OnDeserializing] void Defaults(StreamingContext c)
         {
             AutoEnabled = true; Rules = new List<GameRule>(); FallbackLayer = -1; CloseToTray = true;
             CheckUpdates = true; AutoInstallUpdates = true; UsbLog = true;
+            KeyGifs = new List<KeyGif>();
         }
 
         public static AppSettings Load()
@@ -81,6 +94,7 @@ namespace AttackOnShadow.Services
             catch (Exception e) { Log.Info("settings unreadable: " + e.Message); }
             s = s ?? new AppSettings();
             if (s.Rules == null) s.Rules = new List<GameRule>();
+            if (s.KeyGifs == null) s.KeyGifs = new List<KeyGif>();
             if (!s.ImportedFromMod) { s.ImportFromMod(); s.ImportedFromMod = true; s.Save(); }
             return s;
         }

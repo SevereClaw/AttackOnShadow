@@ -24,6 +24,8 @@ namespace AttackOnShadow.Device
         Task CalibrationStartAsync();             // zero point (2 s, hands off), then max-travel mode on
         Task CalibrationFinishAsync();            // max-travel mode off
         Task<double[]> GetCalibrationAsync();     // per matrix index 0..1, null if unavailable
+        /// <summary>Stores a per-key picture into the slot shown now. live = part of an animation (short pause after).</summary>
+        Task<bool> SetUserPictureAsync(byte[] rgb, bool live);
     }
 
     public sealed class Performance
@@ -244,6 +246,20 @@ namespace AttackOnShadow.Device
             return K85Travel.CalProgress(max.ToArray(), cal.ToArray());
         });
 
+        public Task<bool> SetUserPictureAsync(byte[] rgb, bool live) => Locked(() =>
+        {
+            bool log = Log.UsbEnabled;
+            if (live) Log.UsbEnabled = false; // an animation would flood usb.txt
+            try
+            {
+                foreach (var p in K85Protocol.SetUserPicture(rgb)) Write(p);
+            }
+            finally { Log.UsbEnabled = log; }
+            if (live) { LastWrite = DateTime.Now; quietUntil = DateTime.Now.AddMilliseconds(15); }
+            else Settle(1500);
+            return true;
+        });
+
         public void Dispose() { dev.Dispose(); gate.Dispose(); }
     }
 
@@ -275,6 +291,8 @@ namespace AttackOnShadow.Device
             foreach (var k in K85Travel.Layout) r[k.Matrix] = Math.Max(0, Math.Min(1, t * 2 - k.X));
             return Task.FromResult(r);
         }
+        public byte[] Picture = KeyImage.Sample();
+        public Task<bool> SetUserPictureAsync(byte[] rgb, bool live) { Picture = (byte[])rgb.Clone(); return Task.Delay(live ? 60 : 300).ContinueWith(_ => true); }
         public void Dispose() { }
     }
 }
