@@ -1,12 +1,13 @@
-# Builds AttackOnShadow.exe on every change and, when mod/version.json has a
-# version without a tag yet, publishes a GitHub release with the exe attached.
-# The in-app updater (МОД → Обновления мода) downloads that exe and runs it silently.
+# Builds the AttackOnShadow app (app/) on Windows, runs the protocol self-test,
+# renders every screen with a simulated keyboard, and — when VERSION has no tag
+# yet — publishes a release with AttackOnShadow.exe. Add "[skip release]" to a
+# commit message to build and test without publishing.
 name: Build & Release
 
 on:
   push:
     branches: [main]
-    paths: [mod/**, patch/**, setup/**, .github/workflows/release.yml]
+    paths: [app/**, VERSION, docs/release-notes/**, .github/workflows/release.yml]
   workflow_dispatch:
 
 permissions:
@@ -23,72 +24,47 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Syntax check (JS)
-        run: |
-          foreach ($f in 'mod/theme/aos-theme.js','mod/theme/aos-features.js','mod/main/aos-main.js','patch/patch.js') { node --check $f; if ($LASTEXITCODE) { exit 1 } }
-
-      - name: Build exe
-        run: ./setup/build.ps1
-
-      - name: Smoke test
-        run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'aos-extract'
-          $p = Start-Process setup/out/AttackOnShadow.exe -ArgumentList '--extract', "`"$dir`"" -Wait -PassThru
-          if ($p.ExitCode -ne 0) { throw "extract exit code $($p.ExitCode)" }
-          foreach ($f in 'mod/version.json','mod/main/aos-main.js','mod/theme/aos-theme.css','mod/assets/icon.png','patch/patch.js') {
-            if (-not (Test-Path (Join-Path $dir $f))) { throw "missing $f in payload" }
-          }
-          # the patcher must refuse cleanly when there is no driver
-          node (Join-Path $dir 'patch/patch.js') status (Join-Path $env:RUNNER_TEMP 'nothing-here')
-          if ($LASTEXITCODE -ne 2) { throw "patch.js status: expected exit 2, got $LASTEXITCODE" }
-          $global:LASTEXITCODE = 0
-          Write-Host 'payload OK'
-
-      - name: End-to-end test (silent install / uninstall on a fake driver)
-        run: |
-          # fake driver: node.exe named like the driver runs patch.js the same way
-          # the real Electron does with ELECTRON_RUN_AS_NODE=1
-          $d = Join-Path $env:RUNNER_TEMP 'Fake Driver'
-          $app = Join-Path $d 'resources/app'
-          New-Item -ItemType Directory -Force "$app/main_dist", "$app/dist/static/js", "$app/company/company_AttackShark" | Out-Null
-          Copy-Item (Get-Command node).Source (Join-Path $d 'Attack Shark Driver.exe')
-          '{"name":"Attack Shark Driver","version":"2.1.79"}' | Set-Content "$app/package.json"
-          'console.log(1)' | Set-Content "$app/main_dist/main.js"
-          '<!doctype html><html><head><title>x</title><style>a{}</style></head><body></body></html>' | Set-Content "$app/dist/index.html"
-          'var x=1;' | Set-Content "$app/dist/static/js/main_test.js"
-          '{"company":"AttackShark"}' | Set-Content "$app/company/company_AttackShark/CONFIG.json"
-          $orig = Get-FileHash "$app/dist/index.html"
-
-          $p = Start-Process setup/out/AttackOnShadow.exe -ArgumentList '--install','--silent','--driver',"`"$d`"" -Wait -PassThru
-          Get-Content (Join-Path $env:TEMP 'aos-setup.log') -Encoding utf8
-          if ($p.ExitCode -ne 0) { throw "install exit code $($p.ExitCode)" }
-          if (-not (Test-Path "$app/aos/INSTALLED")) { throw 'INSTALLED marker missing' }
-          if (-not (Select-String -Path "$app/dist/index.html" -Pattern 'aos-features.js' -Quiet)) { throw 'index.html not patched' }
-          Get-Content "$app/aos/INSTALLED"
-
-          $p = Start-Process setup/out/AttackOnShadow.exe -ArgumentList '--uninstall','--silent','--driver',"`"$d`"" -Wait -PassThru
-          Get-Content (Join-Path $env:TEMP 'aos-setup.log') -Encoding utf8
-          if ($p.ExitCode -ne 0) { throw "uninstall exit code $($p.ExitCode)" }
-          if ((Get-FileHash "$app/dist/index.html").Hash -ne $orig.Hash) { throw 'index.html not restored' }
-          if (Test-Path "$app/aos") { throw 'aos folder left behind' }
-          Write-Host 'e2e OK'
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AttackOnShadow-exe
-          path: setup/out/AttackOnShadow.exe
-
-      - name: Read version
+      - name: Version
         id: v
         run: |
-          $v = (Get-Content mod/version.json -Raw | ConvertFrom-Json).version
+          $v = (Get-Content VERSION -Raw).Trim()
           "version=$v" >> $env:GITHUB_OUTPUT
           git rev-parse "v$v" 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) { "exists=true" >> $env:GITHUB_OUTPUT } else { "exists=false" >> $env:GITHUB_OUTPUT }
           $global:LASTEXITCODE = 0
 
+      - name: Build
+        run: |
+          dotnet build app/AttackOnShadow.csproj -c Release -p:Version=${{ steps.v.outputs.version }} -p:InformationalVersion=${{ steps.v.outputs.version }} -o out
+          if ($LASTEXITCODE) { exit 1 }
+          Get-Item out/AttackOnShadow.exe | Format-List Name, Length
+
+      - name: Self-test (protocol)
+        run: |
+          $p = Start-Process out/AttackOnShadow.exe -ArgumentList '--selftest', "`"$env:RUNNER_TEMP\selftest.txt`"" -Wait -PassThru
+          Get-Content "$env:RUNNER_TEMP\selftest.txt"
+          if ($p.ExitCode -ne 0) { throw "selftest exit $($p.ExitCode)" }
+
+      - name: Screenshots
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'shots'
+          $p = Start-Process out/AttackOnShadow.exe -ArgumentList '--screenshot', "`"$dir`"" -Wait -PassThru
+          if (Test-Path "$dir/error.txt") { Get-Content "$dir/error.txt" }
+          if ($p.ExitCode -ne 0) { throw "screenshot exit $($p.ExitCode)" }
+          Get-ChildItem $dir
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: ${{ runner.temp }}/shots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AttackOnShadow-exe
+          path: out/AttackOnShadow.exe
+
       - name: Publish release
-        if: steps.v.outputs.exists == 'false'
+        if: steps.v.outputs.exists == 'false' && !contains(github.event.head_commit.message, '[skip release]')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -100,5 +76,5 @@ jobs:
             $range = if ($prev) { "$prev..HEAD" } else { 'HEAD' }
             git log --pretty='- %s' $range | Set-Content notes.md -Encoding utf8
           }
-          Add-Content notes.md "`n`n**Установка:** скачай **AttackOnShadow.exe** ниже и запусти. Уже стоит мод — он обновится сам (или: МОД → Обновления мода)." -Encoding utf8
-          gh release create "v$v" setup/out/AttackOnShadow.exe --target "${{ github.sha }}" --title "AttackOnShadow v$v" --notes-file notes.md
+          Add-Content notes.md "`n`n**Установка:** скачай **AttackOnShadow.exe** и запусти. Уже стоит — обновится само." -Encoding utf8
+          gh release create "v$v" out/AttackOnShadow.exe --target "${{ github.sha }}" --title "AttackOnShadow v$v" --notes-file notes.md

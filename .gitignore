@@ -1,1 +1,3 @@
-setup/out/
+legacy/setup/out/
+app/bin/
+app/obj/
